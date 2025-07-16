@@ -1,71 +1,208 @@
-# sf-org-source-compare README
+# Salesforce Org Source Compare
 
-This is the README for your extension "sf-org-source-compare". After writing up a brief description, we recommend including the following sections.
+![VSCode Extension](https://img.shields.io/badge/VSCode-Extension-blue.svg)
+![Version](https://img.shields.io/badge/version-0.0.1-green.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-## Features
+A powerful VSCode extension that enables seamless comparison of source code and metadata between different Salesforce organizations using an intuitive dual-editor interface.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+## ✨ Features
 
-For example if there is an image subfolder under your extension project workspace:
+### 🏢 Multi-Org Management
+- **Easy Org Authentication**: Connect to multiple Salesforce orgs using existing SFDX/SF CLI credentials
+- **Organization Browser**: View all authenticated orgs in a clean tree structure
+- **Quick Access**: Expand orgs to browse metadata without switching contexts
 
-\!\[feature X\]\(images/feature-x.png\)
+### 📂 Comprehensive Metadata Support
+- **ApexClass**: View and compare Apex class implementations
+- **ApexTrigger**: Compare trigger logic across orgs
+- **CustomObject**: Detailed XML metadata with fields, validation rules, and relationships
+- **Flow**: Process builder and flow definitions
+- **Layout**: Page layout configurations
+- **PermissionSet**: Security and access permissions
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### 🔄 Intelligent File Selection
+- **Visual Indicators**: Selected files marked with `[1]` and `[2]` badges
+- **Color-Coded Icons**: Blue for first selection, red for second selection
+- **Toggle Selection**: Click to select, click again to unselect
+- **Smart Replacement**: Selecting a third file automatically replaces the oldest selection
 
-## Requirements
+### ⚡ Performance Optimized
+- **Smart Caching**: Metadata loaded once per org session
+- **No Unnecessary API Calls**: File selection doesn't trigger org requests
+- **Responsive Interface**: Instant visual feedback for all interactions
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+### 🔍 Advanced Comparison
+- **Native VSCode Diff**: Leverage VSCode's powerful built-in diff editor
+- **Side-by-Side View**: Compare files from different orgs simultaneously
+- **Meaningful File Names**: Temporary files named `FileName_OrgName` for clarity
+- **Syntax Highlighting**: Proper language detection for Apex, XML, and other formats
 
-## Extension Settings
+## 🚀 Getting Started
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+### Prerequisites
 
-For example:
+1. **VS Code**: Version 1.102.0 or higher
+2. **Salesforce CLI**: Install the latest [Salesforce CLI v2](https://developer.salesforce.com/tools/salesforcecli)
+3. **Authenticated Orgs**: At least one Salesforce org authenticated via `sf org login`
 
-This extension contributes the following settings:
+### Installation
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/chenchenick/sf-org-source-compare.git
+   cd sf-org-source-compare
+   ```
 
-## Known Issues
+2. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+3. **Compile the Extension**:
+   ```bash
+   npm run compile
+   ```
 
-## Release Notes
+4. **Run in Development**:
+   - Press `F5` to open a new VS Code window with the extension loaded
+   - Or use the VS Code debugger with the provided launch configuration
 
-Users appreciate release notes as you update your extension.
+### Quick Setup
 
-### 1.0.0
+1. **Authenticate with Salesforce**:
+   ```bash
+   sf org login web --alias my-dev-org
+   sf org login web --alias my-prod-org
+   ```
 
-Initial release of ...
+2. **Open the Extension**:
+   - Click the Salesforce icon in the Activity Bar
+   - Or use `Ctrl+Shift+P` and search for "SF Org Compare"
 
-### 1.0.1
+3. **Add Organizations**:
+   - Click "Add Organization" or the "+" icon
+   - Select from your authenticated orgs
 
-Fixed issue #.
+## 🎯 Usage
 
-### 1.1.0
+### Comparing Files
 
-Added features X, Y, and Z.
+1. **Expand Organizations**: Click the arrow or org name to load metadata
+2. **Browse Metadata**: Navigate through organized folders (Apex Classes, Custom Objects, etc.)
+3. **Select Files**: Click files to select them (up to 2 files)
+4. **Compare**: Click the compare button or use `Ctrl+Shift+P` → "Compare Selected Files"
+
+### Managing Organizations
+
+- **Add Org**: Use the "+" button in the extension panel
+- **Remove Org**: Right-click on an org and select "Delete Organization"
+- **Refresh**: Use the refresh button to reload org data
+
+### Keyboard Shortcuts
+
+- `Ctrl+Shift+P` → "SF Org Compare: Compare Selected Files"
+- `Ctrl+Shift+P` → "SF Org Compare: Clear File Selection"
+- `Ctrl+Shift+P` → "SF Org Compare: Refresh Organizations"
+
+## 🛠️ Technical Details
+
+### Architecture
+
+```
+src/
+├── extension.ts              # Extension activation and command registration
+├── providers/
+│   └── SfOrgCompareProvider.ts   # Tree data provider and UI logic
+├── services/
+│   ├── OrgManager.ts         # Salesforce org management and API calls
+│   └── FileCompareService.ts # File selection and comparison logic
+└── types/
+    └── index.ts              # TypeScript type definitions
+```
+
+### SF CLI Integration
+
+The extension uses modern Salesforce CLI v2 commands:
+- `sf org list` - List authenticated organizations
+- `sf org list metadata` - Retrieve metadata for specific types
+- `sf data query --use-tooling-api` - Get Apex class/trigger content
+- `sf project retrieve start` - Download XML metadata for custom objects
+- `sf sobject describe` - Get detailed object schema information
+
+### Caching Strategy
+
+- **Org-level caching**: Metadata loaded once per session
+- **Smart invalidation**: Cache cleared when orgs are removed
+- **Performance first**: File selection operations use cached data only
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**"No authenticated orgs found"**
+- Run `sf org list` to verify authenticated orgs
+- Re-authenticate with `sf org login web`
+
+**"Failed to load files for org"**
+- Check org permissions for metadata access
+- Verify SF CLI installation: `sf version`
+- Ensure org is still authenticated: `sf org display --target-org your-org`
+
+**Extension not appearing**
+- Check VS Code version compatibility (1.102.0+)
+- Reload window: `Ctrl+Shift+P` → "Developer: Reload Window"
+
+### Debug Mode
+
+Enable console logging:
+1. Open VS Code Developer Tools (`Ctrl+Shift+I`)
+2. Check Console tab for detailed logs
+3. Look for messages starting with extension operations
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+### Development Setup
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes and add tests
+4. Run tests: `npm test`
+5. Submit a pull request
+
+### Testing
+
+```bash
+# Run TypeScript checks
+npm run check-types
+
+# Run linting
+npm run lint
+
+# Run all tests
+npm test
+```
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with [VS Code Extension API](https://code.visualstudio.com/api)
+- Powered by [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli)
+- Inspired by the Salesforce developer community
 
 ---
 
-## Following extension guidelines
+## 📞 Support
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+- **Issues**: [GitHub Issues](https://github.com/chenchenick/sf-org-source-compare/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/chenchenick/sf-org-source-compare/discussions)
+- **Email**: chen@chenology.com
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+---
 
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**Made with ❤️ for the Salesforce Developer Community**
