@@ -1,13 +1,21 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { CompareSelection, OrgFile } from '../types';
 import { OrgManager } from './OrgManager';
 
 export class FileCompareService {
     private selectedFiles: OrgFile[] = [];
     private orgManager: OrgManager;
+    private tempDir: string;
+    private sessionId: string;
+    private createdFiles: Set<string> = new Set();
 
     constructor(orgManager: OrgManager) {
         this.orgManager = orgManager;
+        this.sessionId = this.generateSessionId();
+        this.tempDir = this.createSessionTempDirectory();
     }
 
     public selectFile(file: OrgFile): void {
@@ -84,26 +92,34 @@ export class FileCompareService {
     }
 
     private async createNamedTempFile(file: OrgFile): Promise<vscode.Uri> {
-        // Get actual file content from the org (unmodified)
-        const content = await this.orgManager.getFileContent(file.orgId, file.id);
-        
-        // Get org name for the file name
-        const org = this.orgManager.getOrg(file.orgId);
-        const orgName = org?.alias || org?.username || 'UnknownOrg';
-        
-        // Create a meaningful file name: FileName_OrgName
-        const tempFileName = `${file.name}_${orgName}`;
-        
-        // Create the document with original content (no modifications)
-        const doc = await vscode.workspace.openTextDocument({
-            content: content,
-            language: this.getLanguageFromFileName(file.name)
-        });
-        
-        // Create a named URI that will show up with the proper name
-        const namedUri = vscode.Uri.parse(`untitled:${tempFileName}`);
-        
-        return doc.uri;
+        try {
+            // Get actual file content from the org
+            const content = await this.orgManager.getFileContent(file.orgId, file.id);
+            
+            // Get org name for the file name
+            const org = this.orgManager.getOrg(file.orgId);
+            const orgName = this.sanitizeFileName(org?.alias || org?.username || 'UnknownOrg');
+            
+            // Create a meaningful file name: OrgName_FileName
+            const sanitizedFileName = this.sanitizeFileName(file.name);
+            const tempFileName = `${orgName}_${sanitizedFileName}`;
+            const tempFilePath = path.join(this.tempDir, tempFileName);
+            
+            // Ensure directory exists
+            await fs.promises.mkdir(path.dirname(tempFilePath), { recursive: true });
+            
+            // Write content to temporary file
+            await fs.promises.writeFile(tempFilePath, content, 'utf8');
+            
+            // Track created file for cleanup
+            this.createdFiles.add(tempFilePath);
+            
+            console.log('Created temporary file:', tempFilePath);
+            return vscode.Uri.file(tempFilePath);
+        } catch (error) {
+            console.error('Failed to create temporary file:', error);
+            throw new Error(`Failed to create temporary file for ${file.name}: ${error}`);
+        }
     }
 
 
@@ -138,5 +154,95 @@ export class FileCompareService {
         }
         
         vscode.window.setStatusBarMessage(statusText, 3000);
+    }
+
+    private generateSessionId(): string {
+        return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    private createSessionTempDirectory(): string {
+        const tempDir = path.join(os.tmpdir(), 'sfcompare', this.sessionId);
+        
+        try {
+            fs.mkdirSync(tempDir, { recursive: true });
+            console.log('Created temporary directory:', tempDir);
+            return tempDir;
+        } catch (error) {
+            console.error('Failed to create temporary directory:', error);
+            // Fallback to system temp directory
+            return os.tmpdir();
+        }
+    }
+
+    private sanitizeFileName(fileName: string): string {
+        // Remove or replace invalid characters for file names
+        return fileName
+            .replace(/[<>:"/\\|?*]/g, '_')  // Replace invalid characters with underscore
+            .replace(/\s+/g, '_')          // Replace spaces with underscore
+            .replace(/_{2,}/g, '_')        // Replace multiple underscores with single
+            .replace(/^_|_$/g, '');        // Remove leading/trailing underscores
+    }
+
+    public async cleanup(): Promise<void> {
+        console.log('Cleaning up temporary files...');
+        
+        // Delete all created files
+        for (const filePath of this.createdFiles) {
+            try {
+                if (fs.existsSync(filePath)) {
+                    await fs.promises.unlink(filePath);
+                    console.log('Deleted temporary file:', filePath);
+                }
+            } catch (error) {
+                console.warn('Failed to delete temporary file:', filePath, error);
+            }
+        }
+        
+        // Clear the tracking set
+        this.createdFiles.clear();
+        
+        // Try to remove the session directory if empty
+        try {
+            if (fs.existsSync(this.tempDir)) {
+                const files = await fs.promises.readdir(this.tempDir);
+                if (files.length === 0) {
+                    await fs.promises.rmdir(this.tempDir);
+                    console.log('Removed empty temporary directory:', this.tempDir);
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to remove temporary directory:', this.tempDir, error);
+        }
+    }
+
+    public static async cleanupOldSessions(): Promise<void> {
+        const baseTempDir = path.join(os.tmpdir(), 'sfcompare');
+        
+        try {
+            if (!fs.existsSync(baseTempDir)) {
+                return;
+            }
+            
+            const sessions = await fs.promises.readdir(baseTempDir);
+            const cutoffTime = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
+            
+            for (const sessionDir of sessions) {
+                const sessionPath = path.join(baseTempDir, sessionDir);
+                
+                try {
+                    const stats = await fs.promises.stat(sessionPath);
+                    
+                    // Remove sessions older than 24 hours
+                    if (stats.isDirectory() && stats.mtime.getTime() < cutoffTime) {
+                        await fs.promises.rm(sessionPath, { recursive: true, force: true });
+                        console.log('Cleaned up old session:', sessionPath);
+                    }
+                } catch (error) {
+                    console.warn('Failed to cleanup old session:', sessionPath, error);
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to cleanup old sessions:', error);
+        }
     }
 }

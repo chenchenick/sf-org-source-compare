@@ -3,13 +3,21 @@ import { SfOrgCompareProvider } from './providers/SfOrgCompareProvider';
 import { OrgManager } from './services/OrgManager';
 import { FileCompareService } from './services/FileCompareService';
 
+// Store service instances for cleanup
+let fileCompareService: FileCompareService;
+
 export function activate(context: vscode.ExtensionContext) {
 	console.log('🚀 Salesforce Org Source Compare extension is now active!');
 	vscode.window.showInformationMessage('SF Org Compare extension activated!');
 
 	const orgManager = new OrgManager(context);
-	const fileCompareService = new FileCompareService(orgManager);
+	fileCompareService = new FileCompareService(orgManager);
 	const sfOrgCompareProvider = new SfOrgCompareProvider(orgManager, fileCompareService);
+
+	// Cleanup old sessions on startup
+	FileCompareService.cleanupOldSessions().catch(error => {
+		console.warn('Failed to cleanup old sessions on startup:', error);
+	});
 
 	console.log('📋 Registering tree data provider...');
 	vscode.window.registerTreeDataProvider('sfOrgCompareView', sfOrgCompareProvider);
@@ -59,6 +67,16 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage('File selection cleared');
 	});
 
+	const cleanupTempFiles = vscode.commands.registerCommand('sf-org-source-compare.cleanupTempFiles', async () => {
+		try {
+			await fileCompareService.cleanup();
+			await FileCompareService.cleanupOldSessions();
+			vscode.window.showInformationMessage('Temporary files cleaned up successfully');
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to cleanup temporary files: ${error}`);
+		}
+	});
+
 	context.subscriptions.push(
 		openCompareView,
 		refreshOrgs,
@@ -67,8 +85,23 @@ export function activate(context: vscode.ExtensionContext) {
 		selectFile,
 		addOrg,
 		deleteOrg,
-		clearSelection
+		clearSelection,
+		cleanupTempFiles
 	);
 }
 
-export function deactivate() {}
+export async function deactivate() {
+	console.log('🧹 Deactivating SF Org Compare extension...');
+	
+	// Cleanup temporary files
+	if (fileCompareService) {
+		try {
+			await fileCompareService.cleanup();
+			console.log('✅ Temporary files cleaned up successfully');
+		} catch (error) {
+			console.error('❌ Failed to cleanup temporary files:', error);
+		}
+	}
+	
+	console.log('👋 SF Org Compare extension deactivated');
+}
