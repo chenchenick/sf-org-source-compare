@@ -11,11 +11,18 @@ export class FileCompareService {
     private tempDir: string;
     private sessionId: string;
     private createdFiles: Set<string> = new Set();
+    private isComparing: boolean = false;
+    private statusBarItem: vscode.StatusBarItem;
 
     constructor(orgManager: OrgManager) {
         this.orgManager = orgManager;
         this.sessionId = this.generateSessionId();
         this.tempDir = this.createSessionTempDirectory();
+        
+        // Create persistent status bar item
+        this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+        this.statusBarItem.show();
+        this.updateStatusBarItem();
     }
 
     public selectFile(file: OrgFile): void {
@@ -35,6 +42,7 @@ export class FileCompareService {
         }
         
         this.updateStatusBar();
+        this.updateStatusBarItem();
         // Trigger tree refresh to show visual indicators
         vscode.commands.executeCommand('sf-org-source-compare.refreshOrgs');
     }
@@ -42,6 +50,7 @@ export class FileCompareService {
     public clearSelection(): void {
         this.selectedFiles = [];
         this.updateStatusBar();
+        this.updateStatusBarItem();
         // Trigger tree refresh to remove visual indicators
         vscode.commands.executeCommand('sf-org-source-compare.refreshOrgs');
     }
@@ -54,6 +63,10 @@ export class FileCompareService {
         return this.selectedFiles.length === 2;
     }
 
+    public isComparingFiles(): boolean {
+        return this.isComparing;
+    }
+
     public async compareSelectedFiles(): Promise<void> {
         if (!this.canCompare()) {
             vscode.window.showWarningMessage('Please select 2 files to compare.');
@@ -63,32 +76,84 @@ export class FileCompareService {
         const file1 = this.selectedFiles[0];
         const file2 = this.selectedFiles[1];
 
-        try {
-            vscode.window.showInformationMessage('Loading file contents from Salesforce orgs...');
-            
-            const uri1 = await this.createNamedTempFile(file1);
-            const uri2 = await this.createNamedTempFile(file2);
+        this.isComparing = true;
+        
+        // Trigger tree refresh immediately to show loading state
+        vscode.commands.executeCommand('sf-org-source-compare.refreshOrgs');
+        
+        // Small delay to ensure UI updates
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Get org names for the title
-            const org1 = this.orgManager.getOrg(file1.orgId);
-            const org2 = this.orgManager.getOrg(file2.orgId);
-            
-            const org1Name = org1?.alias || org1?.username || 'Unknown Org';
-            const org2Name = org2?.alias || org2?.username || 'Unknown Org';
-            
-            const title = `${org1Name}: ${file1.name} ↔ ${org2Name}: ${file2.name}`;
-            
-            await vscode.commands.executeCommand(
-                'vscode.diff',
-                uri1,
-                uri2,
-                title
-            );
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.SourceControl,
+            title: "SF Org Compare",
+            cancellable: false
+        }, async (progress) => {
+            try {
+                // Update progress and status bar
+                progress.report({ increment: 0, message: "Preparing comparison..." });
+                this.updateDetailedStatusBar('Preparing file comparison...');
+                
+                // Trigger tree refresh to show loading state - use await to ensure it completes
+                await vscode.commands.executeCommand('sf-org-source-compare.refreshOrgs');
 
-            vscode.window.showInformationMessage('Files opened for comparison.');
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to compare files: ${error}`);
-        }
+                // Get org names for progress messages
+                const org1 = this.orgManager.getOrg(file1.orgId);
+                const org2 = this.orgManager.getOrg(file2.orgId);
+                
+                const org1Name = org1?.alias || org1?.username || 'Unknown Org';
+                const org2Name = org2?.alias || org2?.username || 'Unknown Org';
+                
+                // Load first file
+                progress.report({ increment: 10, message: `Loading ${file1.name} from ${org1Name}...` });
+                this.updateDetailedStatusBar(`Loading ${file1.name} from ${org1Name}...`);
+                this.updateStatusBarItem();
+                const uri1 = await this.createNamedTempFile(file1);
+                
+                // Load second file
+                progress.report({ increment: 50, message: `Loading ${file2.name} from ${org2Name}...` });
+                this.updateDetailedStatusBar(`Loading ${file2.name} from ${org2Name}...`);
+                this.updateStatusBarItem();
+                const uri2 = await this.createNamedTempFile(file2);
+
+                // Open comparison
+                progress.report({ increment: 80, message: "Opening comparison view..." });
+                this.updateDetailedStatusBar('Opening comparison view...');
+                this.updateStatusBarItem();
+                
+                const title = `${org1Name}: ${file1.name} ↔ ${org2Name}: ${file2.name}`;
+                
+                await vscode.commands.executeCommand(
+                    'vscode.diff',
+                    uri1,
+                    uri2,
+                    title
+                );
+
+                // Complete
+                progress.report({ increment: 100, message: "Comparison ready!" });
+                this.updateDetailedStatusBar('Comparison completed successfully!');
+                
+                // Show success message briefly
+                setTimeout(() => {
+                    vscode.window.showInformationMessage('Files comparison opened successfully.');
+                }, 500);
+
+            } catch (error) {
+                progress.report({ increment: 100, message: "Comparison failed" });
+                this.updateDetailedStatusBar('Comparison failed');
+                vscode.window.showErrorMessage(`Failed to compare files: ${error}`);
+            } finally {
+                // Reset comparing state
+                this.isComparing = false;
+                this.updateStatusBarItem();
+                
+                // Trigger tree refresh to remove loading state
+                setTimeout(() => {
+                    vscode.commands.executeCommand('sf-org-source-compare.refreshOrgs');
+                }, 1000);
+            }
+        });
     }
 
     private async createNamedTempFile(file: OrgFile): Promise<vscode.Uri> {
@@ -156,6 +221,32 @@ export class FileCompareService {
         vscode.window.setStatusBarMessage(statusText, 3000);
     }
 
+    private updateDetailedStatusBar(message: string): void {
+        vscode.window.setStatusBarMessage(`SF Compare: ${message}`, 5000);
+        this.statusBarItem.text = `$(sync~spin) SF Compare: ${message}`;
+        this.statusBarItem.tooltip = message;
+    }
+
+    private updateStatusBarItem(): void {
+        if (this.isComparing) {
+            this.statusBarItem.text = `$(sync~spin) SF Compare: Comparing files...`;
+            this.statusBarItem.tooltip = 'File comparison in progress';
+            this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+        } else if (this.selectedFiles.length === 0) {
+            this.statusBarItem.text = `$(file) SF Compare: No files selected`;
+            this.statusBarItem.tooltip = 'Select files to compare';
+            this.statusBarItem.backgroundColor = undefined;
+        } else if (this.selectedFiles.length === 1) {
+            this.statusBarItem.text = `$(file) SF Compare: ${this.selectedFiles[0].name} (select 1 more)`;
+            this.statusBarItem.tooltip = 'Select one more file to compare';
+            this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
+        } else {
+            this.statusBarItem.text = `$(diff) SF Compare: Ready to compare`;
+            this.statusBarItem.tooltip = `Ready to compare ${this.selectedFiles[0].name} ↔ ${this.selectedFiles[1].name}`;
+            this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
+        }
+    }
+
     private generateSessionId(): string {
         return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
@@ -185,6 +276,11 @@ export class FileCompareService {
 
     public async cleanup(): Promise<void> {
         console.log('Cleaning up temporary files...');
+        
+        // Dispose of status bar item
+        if (this.statusBarItem) {
+            this.statusBarItem.dispose();
+        }
         
         // Delete all created files
         for (const filePath of this.createdFiles) {
