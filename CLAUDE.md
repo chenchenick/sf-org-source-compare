@@ -50,3 +50,8 @@ For debugging: Use F5 to launch Extension Development Host in VSCode
 - Follow VSCode extension guidelines for UI/UX consistency
 - Extension requires Salesforce CLI (sfdx) to be installed and configured
 - Users must authenticate with orgs using `sfdx force:auth:web:login` before using the extension
+
+## Development Guidelines
+
+- Never add extra content to downloaded Salesforce org file content
+- Only request from org when: 1. refresh button clicked; 2. compare button are clicked; 3. org expand are clicked

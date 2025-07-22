@@ -4,18 +4,21 @@ import * as path from 'path';
 import * as os from 'os';
 import { CompareSelection, OrgFile } from '../types';
 import { OrgManager } from './OrgManager';
+import { EnhancedOrgManager } from '../metadata/EnhancedOrgManager';
 
 export class FileCompareService {
     private selectedFiles: OrgFile[] = [];
     private orgManager: OrgManager;
+    private enhancedOrgManager: EnhancedOrgManager | null = null;
     private tempDir: string;
     private sessionId: string;
     private createdFiles: Set<string> = new Set();
     private isComparing: boolean = false;
     private statusBarItem: vscode.StatusBarItem;
 
-    constructor(orgManager: OrgManager) {
+    constructor(orgManager: OrgManager, enhancedOrgManager?: EnhancedOrgManager) {
         this.orgManager = orgManager;
+        this.enhancedOrgManager = enhancedOrgManager || null;
         this.sessionId = this.generateSessionId();
         this.tempDir = this.createSessionTempDirectory();
         
@@ -43,16 +46,16 @@ export class FileCompareService {
         
         this.updateStatusBar();
         this.updateStatusBarItem();
-        // Trigger tree refresh to show visual indicators
-        vscode.commands.executeCommand('sf-org-source-compare.refreshOrgs');
+        // Trigger tree view refresh to show visual indicators (no org requests)
+        vscode.commands.executeCommand('sf-org-source-compare.refreshTreeView');
     }
 
     public clearSelection(): void {
         this.selectedFiles = [];
         this.updateStatusBar();
         this.updateStatusBarItem();
-        // Trigger tree refresh to remove visual indicators
-        vscode.commands.executeCommand('sf-org-source-compare.refreshOrgs');
+        // Trigger tree view refresh to remove visual indicators (no org requests)
+        vscode.commands.executeCommand('sf-org-source-compare.refreshTreeView');
     }
 
     public getSelectedFiles(): OrgFile[] {
@@ -78,15 +81,15 @@ export class FileCompareService {
 
         this.isComparing = true;
         
-        // Trigger tree refresh immediately to show loading state
-        vscode.commands.executeCommand('sf-org-source-compare.refreshOrgs');
+        // Trigger tree view refresh immediately to show loading state (no org requests)
+        vscode.commands.executeCommand('sf-org-source-compare.refreshTreeView');
         
         // Small delay to ensure UI updates
         await new Promise(resolve => setTimeout(resolve, 100));
 
         await vscode.window.withProgress({
-            location: vscode.ProgressLocation.SourceControl,
-            title: "SF Org Compare",
+            location: vscode.ProgressLocation.Notification,
+            title: "Comparing Files",
             cancellable: false
         }, async (progress) => {
             try {
@@ -94,8 +97,8 @@ export class FileCompareService {
                 progress.report({ increment: 0, message: "Preparing comparison..." });
                 this.updateDetailedStatusBar('Preparing file comparison...');
                 
-                // Trigger tree refresh to show loading state - use await to ensure it completes
-                await vscode.commands.executeCommand('sf-org-source-compare.refreshOrgs');
+                // Trigger tree view refresh to show loading state (no org requests)
+                vscode.commands.executeCommand('sf-org-source-compare.refreshTreeView');
 
                 // Get org names for progress messages
                 const org1 = this.orgManager.getOrg(file1.orgId);
@@ -104,15 +107,15 @@ export class FileCompareService {
                 const org1Name = org1?.alias || org1?.username || 'Unknown Org';
                 const org2Name = org2?.alias || org2?.username || 'Unknown Org';
                 
-                // Load first file
-                progress.report({ increment: 10, message: `Loading ${file1.name} from ${org1Name}...` });
-                this.updateDetailedStatusBar(`Loading ${file1.name} from ${org1Name}...`);
+                // Prepare first file
+                progress.report({ increment: 20, message: `Preparing ${file1.name} from ${org1Name}...` });
+                this.updateDetailedStatusBar(`Preparing ${file1.name} from ${org1Name}...`);
                 this.updateStatusBarItem();
                 const uri1 = await this.createNamedTempFile(file1);
                 
-                // Load second file
-                progress.report({ increment: 50, message: `Loading ${file2.name} from ${org2Name}...` });
-                this.updateDetailedStatusBar(`Loading ${file2.name} from ${org2Name}...`);
+                // Prepare second file
+                progress.report({ increment: 60, message: `Preparing ${file2.name} from ${org2Name}...` });
+                this.updateDetailedStatusBar(`Preparing ${file2.name} from ${org2Name}...`);
                 this.updateStatusBarItem();
                 const uri2 = await this.createNamedTempFile(file2);
 
@@ -135,8 +138,13 @@ export class FileCompareService {
                 this.updateDetailedStatusBar('Comparison completed successfully!');
                 
                 // Show success message briefly
+                const hasLocalFiles = file1.filePath && file2.filePath;
+                const message = hasLocalFiles 
+                    ? 'File comparison opened (using local cached files)'
+                    : 'File comparison opened successfully';
+                    
                 setTimeout(() => {
-                    vscode.window.showInformationMessage('Files comparison opened successfully.');
+                    vscode.window.showInformationMessage(message);
                 }, 500);
 
             } catch (error) {
@@ -148,9 +156,9 @@ export class FileCompareService {
                 this.isComparing = false;
                 this.updateStatusBarItem();
                 
-                // Trigger tree refresh to remove loading state
+                // Trigger tree view refresh to remove loading state (no org requests)
                 setTimeout(() => {
-                    vscode.commands.executeCommand('sf-org-source-compare.refreshOrgs');
+                    vscode.commands.executeCommand('sf-org-source-compare.refreshTreeView');
                 }, 1000);
             }
         });
@@ -158,8 +166,17 @@ export class FileCompareService {
 
     private async createNamedTempFile(file: OrgFile): Promise<vscode.Uri> {
         try {
-            // Get actual file content from the org
-            const content = await this.orgManager.getFileContent(file.orgId, file.id);
+            // If file has a local file path, use it directly
+            if (file.filePath && fs.existsSync(file.filePath)) {
+                console.log('Using existing local file:', file.filePath);
+                return vscode.Uri.file(file.filePath);
+            }
+            
+            // Fallback: retrieve content and create temp file (for backward compatibility)
+            console.log('Falling back to content retrieval for file:', file.name);
+            const content = this.enhancedOrgManager 
+                ? await this.enhancedOrgManager.getFileContent(file.orgId, file.id)
+                : await this.orgManager.getFileContent(file.orgId, file.id);
             
             // Get org name for the file name
             const org = this.orgManager.getOrg(file.orgId);

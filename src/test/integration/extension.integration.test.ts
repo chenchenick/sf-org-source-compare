@@ -116,7 +116,12 @@ suite('Extension Integration Test Suite', () => {
         // Create real instances (not mocks) for integration testing
         orgManager = new OrgManager(mockContext);
         fileCompareService = new FileCompareService(orgManager);
-        provider = new SfOrgCompareProvider(orgManager, fileCompareService);
+        // Mock EnhancedOrgManager for test
+        const mockEnhancedOrgManager = {
+            getOrgFilesByType: sinon.stub().resolves(new Map()),
+            getFileContent: sinon.stub().resolves('mock content')
+        } as any;
+        provider = new SfOrgCompareProvider(orgManager, mockEnhancedOrgManager, fileCompareService);
     });
 
     teardown(() => {

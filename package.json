@@ -64,6 +64,11 @@
         "category": "SF Org Compare"
       },
       {
+        "command": "sf-org-source-compare.openFile",
+        "title": "Open File",
+        "category": "SF Org Compare"
+      },
+      {
         "command": "sf-org-source-compare.addOrg",
         "title": "Add Organization",
         "category": "SF Org Compare",
@@ -86,6 +91,12 @@
         "title": "Cleanup Temporary Files",
         "category": "SF Org Compare",
         "icon": "$(trash)"
+      },
+      {
+        "command": "sf-org-source-compare.refreshOrg",
+        "title": "Refresh Organization",
+        "category": "SF Org Compare",
+        "icon": "$(refresh)"
       }
     ],
     "viewsContainers": {
@@ -136,9 +147,19 @@
       ],
       "view/item/context": [
         {
+          "command": "sf-org-source-compare.refreshOrg",
+          "when": "view == sfOrgCompareView && viewItem == availableOrg",
+          "group": "inline"
+        },
+        {
           "command": "sf-org-source-compare.deleteOrg",
           "when": "view == sfOrgCompareView && viewItem == availableOrg",
           "group": "inline"
+        },
+        {
+          "command": "sf-org-source-compare.selectFile",
+          "when": "view == sfOrgCompareView && viewItem == file",
+          "group": "compare"
         }
       ]
     },

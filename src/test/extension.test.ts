@@ -84,7 +84,12 @@ suite('Extension Test Suite', () => {
         setup(() => {
             orgManager = new OrgManager(mockContext);
             fileCompareService = new FileCompareService(orgManager);
-            provider = new SfOrgCompareProvider(orgManager, fileCompareService);
+            // Mock EnhancedOrgManager for test
+            const mockEnhancedOrgManager = {
+                getOrgFilesByType: sinon.stub().resolves(new Map()),
+                getFileContent: sinon.stub().resolves('mock content')
+            } as any;
+            provider = new SfOrgCompareProvider(orgManager, mockEnhancedOrgManager, fileCompareService);
         });
 
         test('should handle openCompareView command', async () => {

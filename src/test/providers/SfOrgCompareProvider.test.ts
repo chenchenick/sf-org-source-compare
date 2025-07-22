@@ -73,7 +73,12 @@ suite('SfOrgCompareProvider Test Suite', () => {
         mockOrgManager.getOrg.withArgs('org2-id').returns(sampleOrg2);
         mockFileCompareService.getSelectedFiles.returns([]);
 
-        provider = new SfOrgCompareProvider(mockOrgManager as any, mockFileCompareService as any);
+        // Mock EnhancedOrgManager for test
+        const mockEnhancedOrgManager = {
+            getOrgFilesByType: sinon.stub().resolves(new Map()),
+            getFileContent: sinon.stub().resolves('mock content')
+        } as any;
+        provider = new SfOrgCompareProvider(mockOrgManager as any, mockEnhancedOrgManager, mockFileCompareService as any);
     });
 
     teardown(() => {
@@ -82,7 +87,11 @@ suite('SfOrgCompareProvider Test Suite', () => {
 
     suite('Constructor', () => {
         test('should initialize with empty expanded orgs and cache', () => {
-            const newProvider = new SfOrgCompareProvider(mockOrgManager as any, mockFileCompareService as any);
+            const mockEnhancedOrgManager = {
+                getOrgFilesByType: sinon.stub().resolves(new Map()),
+                getFileContent: sinon.stub().resolves('mock content')
+            } as any;
+            const newProvider = new SfOrgCompareProvider(mockOrgManager as any, mockEnhancedOrgManager, mockFileCompareService as any);
             assert.ok(newProvider);
         });
     });
@@ -514,7 +523,7 @@ suite('SfOrgCompareProvider Test Suite', () => {
     suite('edge cases and error handling', () => {
         test('should handle provider with no dependencies', () => {
             try {
-                new SfOrgCompareProvider(null as any, null as any);
+                new SfOrgCompareProvider(null as any, null as any, null as any);
                 assert.fail('Should throw error with null dependencies');
             } catch (error) {
                 // Expected behavior
