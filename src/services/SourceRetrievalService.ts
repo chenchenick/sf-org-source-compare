@@ -122,6 +122,9 @@ export class SourceRetrievalService {
      * Create package.xml manifest for comprehensive metadata retrieval
      */
     private async createManifest(orgTempDir: string): Promise<string> {
+        // Ensure the directory exists before creating the manifest
+        this.ensureDirectory(orgTempDir);
+        
         const manifestContent = `<?xml version="1.0" encoding="UTF-8"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
     <!-- Apex Classes and Triggers -->
@@ -428,6 +431,9 @@ export class SourceRetrievalService {
                 console.warn(`Failed to clear cache for org ${orgId}:`, error);
             }
         }
+        
+        // Remove the cached directory path so it gets recreated
+        this.orgTempDirs.delete(orgId);
     }
 
     /**
