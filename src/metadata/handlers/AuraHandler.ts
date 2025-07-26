@@ -1,5 +1,6 @@
 import { MetadataHandler } from './base/MetadataHandler';
 import { OrgFile, BundleContent, MetadataTypeDefinition, MetadataHandlerConfig, AuraBundle } from '../../types';
+import { SecureCommandExecutor } from '../../security/SecureCommandExecutor';
 
 /**
  * Handler for Aura Components
@@ -26,8 +27,7 @@ export class AuraHandler extends MetadataHandler {
      */
     public async getFiles(orgId: string, orgIdentifier: string): Promise<OrgFile[]> {
         try {
-            const command = `sf org list metadata --metadata-type AuraDefinitionBundle --target-org "${orgIdentifier}" --json`;
-            const result = await this.executeSfCommand(command);
+            const result = await SecureCommandExecutor.executeOrgListMetadata('AuraDefinitionBundle', orgIdentifier);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result) {
@@ -90,8 +90,7 @@ export class AuraHandler extends MetadataHandler {
         try {
             // Query AuraDefinition table to get all files in the bundle
             const query = `SELECT Id, DefType, Source FROM AuraDefinition WHERE AuraDefinitionBundleId IN (SELECT Id FROM AuraDefinitionBundle WHERE DeveloperName = '${file.fullName}')`;
-            const command = `sf data query --query "${query}" --target-org "${orgIdentifier}" --use-tooling-api --json`;
-            const result = await this.executeSfCommand(command);
+            const result = await SecureCommandExecutor.executeDataQuery(query, orgIdentifier, true);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result || !parsed.result.records || parsed.result.records.length === 0) {

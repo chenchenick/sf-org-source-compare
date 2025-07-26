@@ -1,5 +1,6 @@
 import { MetadataHandlerConfig } from '../types';
 import * as vscode from 'vscode';
+import { ConfigurationManager, SF_CONFIG } from '../config';
 
 /**
  * Configuration interface for metadata handling
@@ -21,8 +22,10 @@ export class MetadataConfiguration {
     private static instance: MetadataConfiguration;
     private configurationMap: Map<string, MetadataTypeConfig> = new Map();
     private readonly configurationKey = 'sfOrgCompare.metadataTypes';
+    private config: ConfigurationManager;
 
     private constructor() {
+        this.config = ConfigurationManager.getInstance();
         this.initializeDefaultConfiguration();
         this.loadConfiguration();
     }
@@ -48,7 +51,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 5,
             retryCount: 3,
-            timeout: 30000,
+            timeout: this.config.getTimeout('default'),
             displayName: 'Apex Classes'
         });
 
@@ -58,7 +61,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 5,
             retryCount: 3,
-            timeout: 30000,
+            timeout: this.config.getTimeout('default'),
             displayName: 'Apex Triggers'
         });
 
@@ -68,7 +71,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 3,
             retryCount: 3,
-            timeout: 45000,
+            timeout: this.config.getTimeout('medium'),
             displayName: 'Custom Objects'
         });
 
@@ -78,7 +81,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 3,
             retryCount: 3,
-            timeout: 60000,
+            timeout: this.config.getTimeout('extended'),
             displayName: 'Lightning Web Components'
         });
 
@@ -89,7 +92,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 3,
             retryCount: 3,
-            timeout: 60000,
+            timeout: this.config.getTimeout('extended'),
             displayName: 'Aura Components'
         });
 
@@ -99,7 +102,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 5,
             retryCount: 3,
-            timeout: 30000,
+            timeout: this.config.getTimeout('default'),
             displayName: 'Permission Sets'
         });
 
@@ -109,7 +112,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 2,
             retryCount: 3,
-            timeout: 60000,
+            timeout: this.config.getTimeout('extended'),
             displayName: 'Profiles'
         });
 
@@ -119,7 +122,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 3,
             retryCount: 3,
-            timeout: 45000,
+            timeout: this.config.getTimeout('medium'),
             displayName: 'Flows'
         });
 
@@ -129,7 +132,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 5,
             retryCount: 3,
-            timeout: 30000,
+            timeout: this.config.getTimeout('default'),
             displayName: 'Layouts'
         });
 
@@ -140,7 +143,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 3,
             retryCount: 3,
-            timeout: 30000,
+            timeout: this.config.getTimeout('default'),
             displayName: 'Custom Labels'
         });
 
@@ -150,7 +153,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 5,
             retryCount: 3,
-            timeout: 30000,
+            timeout: this.config.getTimeout('default'),
             displayName: 'Custom Metadata Types'
         });
 
@@ -160,7 +163,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 5,
             retryCount: 3,
-            timeout: 30000,
+            timeout: this.config.getTimeout('default'),
             displayName: 'Email Templates'
         });
 
@@ -170,7 +173,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 2,
             retryCount: 3,
-            timeout: 60000,
+            timeout: this.config.getTimeout('extended'),
             displayName: 'Static Resources'
         });
 
@@ -180,7 +183,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 3,
             retryCount: 3,
-            timeout: 30000,
+            timeout: this.config.getTimeout('default'),
             displayName: 'Reports'
         });
 
@@ -190,7 +193,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 3,
             retryCount: 3,
-            timeout: 30000,
+            timeout: this.config.getTimeout('default'),
             displayName: 'Dashboards'
         });
     }
@@ -272,7 +275,7 @@ export class MetadataConfiguration {
                 parallel: true,
                 maxConcurrency: 3,
                 retryCount: 3,
-                timeout: 30000
+                timeout: this.config.getTimeout('default')
             };
         }
 
@@ -281,7 +284,7 @@ export class MetadataConfiguration {
             parallel: config.parallel,
             maxConcurrency: config.maxConcurrency || 3,
             retryCount: config.retryCount || 3,
-            timeout: config.timeout || 30000
+            timeout: config.timeout || this.config.getTimeout('default')
         };
     }
 
@@ -383,7 +386,7 @@ export class MetadataConfiguration {
             parallel: true,
             maxConcurrency: 3,
             retryCount: 3,
-            timeout: 30000,
+            timeout: this.config.getTimeout('default'),
             displayName: metadataType
         };
 
@@ -402,7 +405,7 @@ export class MetadataConfiguration {
                     ...config,
                     parallel: true,
                     maxConcurrency: Math.min(config.maxConcurrency || 3, 5), // Limit concurrency
-                    timeout: Math.min(config.timeout || 30000, 60000) // Limit timeout
+                    timeout: Math.min(config.timeout || this.config.getTimeout('default'), this.config.getTimeout('extended')) // Limit timeout
                 };
 
                 optimizedConfig.set(metadataType, optimizedTypeConfig);
@@ -431,7 +434,7 @@ export class MetadataConfiguration {
             priority: config.priority,
             parallel: config.parallel,
             maxConcurrency: config.maxConcurrency || 3,
-            timeout: config.timeout || 30000
+            timeout: config.timeout || this.config.getTimeout('default')
         }));
     }
 
@@ -474,7 +477,7 @@ export class MetadataConfiguration {
                     ...config,
                     parallel: true,
                     maxConcurrency: Math.min(config.maxConcurrency || 3, 2), // Reduce concurrency for large orgs
-                    timeout: Math.max(config.timeout || 30000, 60000), // Increase timeout
+                    timeout: Math.max(config.timeout || this.config.getTimeout('default'), this.config.getTimeout('extended')), // Increase timeout
                     retryCount: Math.max(config.retryCount || 3, 5) // Increase retry count
                 };
 

@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
-import { OrgManager } from '../../services/OrgManager';
+import { EnhancedOrgManager } from '../../metadata/EnhancedOrgManager';
 import { FileCompareService } from '../../services/FileCompareService';
 import { SfOrgCompareProvider } from '../../providers/SfOrgCompareProvider';
 import { SalesforceOrg, OrgFile, ItemType } from '../../types';
@@ -10,7 +10,7 @@ suite('Extension Integration Test Suite', () => {
     let mockContext: vscode.ExtensionContext;
     let mockGlobalState: sinon.SinonStubbedInstance<vscode.Memento>;
     let mockExecAsync: sinon.SinonStub;
-    let orgManager: OrgManager;
+    let enhancedOrgManager: EnhancedOrgManager;
     let fileCompareService: FileCompareService;
     let provider: SfOrgCompareProvider;
 
@@ -114,14 +114,14 @@ suite('Extension Integration Test Suite', () => {
         sinon.stub(vscode.workspace, 'openTextDocument');
 
         // Create real instances (not mocks) for integration testing
-        orgManager = new OrgManager(mockContext);
-        fileCompareService = new FileCompareService(orgManager);
+        enhancedOrgManager = new EnhancedOrgManager(mockContext);
+        fileCompareService = new FileCompareService(enhancedOrgManager);
         // Mock EnhancedOrgManager for test
         const mockEnhancedOrgManager = {
             getOrgFilesByType: sinon.stub().resolves(new Map()),
             getFileContent: sinon.stub().resolves('mock content')
         } as any;
-        provider = new SfOrgCompareProvider(orgManager, mockEnhancedOrgManager, fileCompareService);
+        provider = new SfOrgCompareProvider(enhancedOrgManager, fileCompareService);
     });
 
     teardown(() => {
@@ -135,26 +135,36 @@ suite('Extension Integration Test Suite', () => {
                 stdout: JSON.stringify(mockSfCliOrgListResponse)
             });
 
-            const orgs = await orgManager.querySfdxOrgs();
+            const orgs = await enhancedOrgManager.querySfdxOrgs();
             assert.strictEqual(orgs.length, 2);
             
-            await orgManager.addOrg(orgs[0]);
-            await orgManager.addOrg(orgs[1]);
+            await enhancedOrgManager.addOrg(orgs[0]);
+            await enhancedOrgManager.addOrg(orgs[1]);
 
             // Step 2: Load metadata from orgs
             mockExecAsync.withArgs(sinon.match(/sf org list metadata/)).resolves({
                 stdout: JSON.stringify(mockMetadataResponse)
             });
 
-            const org1Files = await orgManager.getOrgFilesByType(sampleOrg1.id);
-            assert.ok(org1Files.size > 0);
+            const org1SourceDir = await enhancedOrgManager.getOrgSourceDirectory(sampleOrg1.id);
+            assert.ok(typeof org1SourceDir === 'string');
+            assert.ok(org1SourceDir.length > 0);
 
-            const apexFiles = org1Files.get('ApexClass');
-            assert.ok(apexFiles && apexFiles.length === 2);
-
-            // Step 3: Select files for comparison
-            const file1 = apexFiles[0];
-            const file2 = { ...apexFiles[0], orgId: sampleOrg2.id, id: 'different-id' };
+            // Step 3: Select files for comparison (using mock files)
+            const file1: OrgFile = {
+                id: 'file1-id',
+                name: 'TestClass.cls',
+                type: 'ApexClass',
+                fullName: 'TestClass',
+                orgId: sampleOrg1.id
+            };
+            const file2: OrgFile = {
+                id: 'file2-id',
+                name: 'TestClass.cls',
+                type: 'ApexClass',
+                fullName: 'TestClass',
+                orgId: sampleOrg2.id
+            };
 
             fileCompareService.selectFile(file1);
             fileCompareService.selectFile(file2);
@@ -178,8 +188,8 @@ suite('Extension Integration Test Suite', () => {
 
         test('should handle org expansion and file loading in tree provider', async () => {
             // Add orgs to manager
-            await orgManager.addOrg(sampleOrg1);
-            await orgManager.addOrg(sampleOrg2);
+            await enhancedOrgManager.addOrg(sampleOrg1);
+            await enhancedOrgManager.addOrg(sampleOrg2);
 
             // Mock metadata loading
             mockExecAsync.resolves({
@@ -211,7 +221,7 @@ suite('Extension Integration Test Suite', () => {
 
         test('should handle file selection through tree provider', async () => {
             // Setup orgs and files
-            await orgManager.addOrg(sampleOrg1);
+            await enhancedOrgManager.addOrg(sampleOrg1);
             mockExecAsync.resolves({ stdout: JSON.stringify(mockMetadataResponse) });
 
             // Expand org
@@ -246,7 +256,7 @@ suite('Extension Integration Test Suite', () => {
             mockExecAsync.rejects(new Error('sf: command not found'));
 
             try {
-                await orgManager.querySfdxOrgs();
+                await enhancedOrgManager.querySfdxOrgs();
                 assert.fail('Should have thrown error');
             } catch (error: any) {
                 assert.ok(error.message.includes('Failed to query Salesforce orgs'));
@@ -254,13 +264,13 @@ suite('Extension Integration Test Suite', () => {
 
             // Test metadata loading failure
             mockExecAsync.resolves({ stdout: JSON.stringify(mockSfCliOrgListResponse) });
-            const orgs = await orgManager.querySfdxOrgs();
-            await orgManager.addOrg(orgs[0]);
+            const orgs = await enhancedOrgManager.querySfdxOrgs();
+            await enhancedOrgManager.addOrg(orgs[0]);
 
             mockExecAsync.rejects(new Error('Network timeout'));
 
             try {
-                await orgManager.getOrgFilesByType(orgs[0].id);
+                await enhancedOrgManager.getOrgSourceDirectory(orgs[0].id);
                 assert.fail('Should have thrown error');
             } catch (error: any) {
                 assert.ok(error.message.includes('Failed to fetch files for org'));
@@ -270,7 +280,7 @@ suite('Extension Integration Test Suite', () => {
 
     suite('Cache Integration', () => {
         test('should use cache across provider and org manager', async () => {
-            await orgManager.addOrg(sampleOrg1);
+            await enhancedOrgManager.addOrg(sampleOrg1);
             
             // First call should hit the API
             mockExecAsync.resolves({ stdout: JSON.stringify(mockMetadataResponse) });
@@ -286,7 +296,7 @@ suite('Extension Integration Test Suite', () => {
         });
 
         test('should clear cache when org is deleted', async () => {
-            await orgManager.addOrg(sampleOrg1);
+            await enhancedOrgManager.addOrg(sampleOrg1);
             
             // Load files to populate cache
             mockExecAsync.resolves({ stdout: JSON.stringify(mockMetadataResponse) });
@@ -313,7 +323,7 @@ suite('Extension Integration Test Suite', () => {
 
     suite('Performance Integration', () => {
         test('should handle large number of files efficiently', async () => {
-            await orgManager.addOrg(sampleOrg1);
+            await enhancedOrgManager.addOrg(sampleOrg1);
 
             // Mock large metadata response
             const largeMetadataResponse = {
@@ -384,7 +394,7 @@ suite('Extension Integration Test Suite', () => {
 
             mockExecAsync.resolves({ stdout: JSON.stringify(partialResponse) });
 
-            const orgs = await orgManager.querySfdxOrgs();
+            const orgs = await enhancedOrgManager.querySfdxOrgs();
             assert.strictEqual(orgs.length, 2);
 
             // Both orgs should have generated IDs
@@ -393,8 +403,8 @@ suite('Extension Integration Test Suite', () => {
         });
 
         test('should handle comparison between same file in different orgs', async () => {
-            await orgManager.addOrg(sampleOrg1);
-            await orgManager.addOrg(sampleOrg2);
+            await enhancedOrgManager.addOrg(sampleOrg1);
+            await enhancedOrgManager.addOrg(sampleOrg2);
 
             const file1: OrgFile = {
                 id: 'file1-id',
@@ -435,15 +445,15 @@ suite('Extension Integration Test Suite', () => {
             assert.strictEqual(emptyRootItems[0].id, 'no-orgs');
 
             // Add orgs
-            await orgManager.addOrg(sampleOrg1);
-            await orgManager.addOrg(sampleOrg2);
+            await enhancedOrgManager.addOrg(sampleOrg1);
+            await enhancedOrgManager.addOrg(sampleOrg2);
 
             // Refresh should show organizations
             const orgRootItems = await provider.getChildren();
             assert.strictEqual(orgRootItems[0].label, 'Organizations (2)');
 
             // Remove one org
-            await orgManager.removeOrg(sampleOrg1.id);
+            await enhancedOrgManager.removeOrg(sampleOrg1.id);
 
             // Should update accordingly
             const updatedRootItems = await provider.getChildren();

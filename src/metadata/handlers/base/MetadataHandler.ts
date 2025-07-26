@@ -1,4 +1,6 @@
 import { OrgFile, BundleContent, MetadataTypeDefinition, MetadataHandlerConfig, ProcessingResult } from '../../../types';
+import { ConfigurationManager } from '../../../config';
+import { SecureCommandExecutor } from '../../../security/SecureCommandExecutor';
 
 /**
  * Abstract base class for all metadata handlers
@@ -7,10 +9,12 @@ import { OrgFile, BundleContent, MetadataTypeDefinition, MetadataHandlerConfig, 
 export abstract class MetadataHandler {
     protected config: MetadataHandlerConfig;
     protected definition: MetadataTypeDefinition;
+    protected configManager: ConfigurationManager;
 
     constructor(definition: MetadataTypeDefinition, config: MetadataHandlerConfig) {
         this.definition = definition;
         this.config = config;
+        this.configManager = ConfigurationManager.getInstance();
     }
 
     /**
@@ -166,17 +170,28 @@ export abstract class MetadataHandler {
     }
 
     /**
-     * Execute SF CLI command with retry logic
+     * Execute SF CLI command with retry logic (DEPRECATED - use SecureCommandExecutor directly)
+     * @deprecated Use SecureCommandExecutor.executeCommand instead
      */
     protected async executeSfCommand(command: string, retries: number = 0): Promise<{ stdout: string; stderr: string }> {
+        console.warn('executeSfCommand is deprecated. Use SecureCommandExecutor.executeCommand instead.');
+        
         const maxRetries = this.config.retryCount || 3;
-        const util = require('util');
-        const exec = util.promisify(require('child_process').exec);
 
         try {
-            const result = await exec(command, { 
-                timeout: this.config.timeout || 30000 
-            });
+            // Parse command string into command and arguments
+            const parts = command.trim().split(/\s+/);
+            if (parts.length === 0) {
+                throw new Error('Invalid command: empty command string');
+            }
+
+            const baseCommand = parts[0];
+            const args = parts.slice(1);
+
+            // Use SecureCommandExecutor with timeout from configuration
+            const timeout = this.config.timeout || this.configManager.getTimeout('default');
+            const result = await SecureCommandExecutor.executeCommand(baseCommand, args, { timeout });
+            
             return result;
         } catch (error) {
             if (retries < maxRetries) {

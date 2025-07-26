@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
 import * as extension from '../extension';
-import { OrgManager } from '../services/OrgManager';
+import { EnhancedOrgManager } from '../metadata/EnhancedOrgManager';
 import { FileCompareService } from '../services/FileCompareService';
 import { SfOrgCompareProvider } from '../providers/SfOrgCompareProvider';
 import { 
@@ -77,19 +77,14 @@ suite('Extension Test Suite', () => {
     });
 
     suite('Command Handlers', () => {
-        let orgManager: OrgManager;
+        let enhancedOrgManager: EnhancedOrgManager;
         let fileCompareService: FileCompareService;
         let provider: SfOrgCompareProvider;
 
         setup(() => {
-            orgManager = new OrgManager(mockContext);
-            fileCompareService = new FileCompareService(orgManager);
-            // Mock EnhancedOrgManager for test
-            const mockEnhancedOrgManager = {
-                getOrgFilesByType: sinon.stub().resolves(new Map()),
-                getFileContent: sinon.stub().resolves('mock content')
-            } as any;
-            provider = new SfOrgCompareProvider(orgManager, mockEnhancedOrgManager, fileCompareService);
+            enhancedOrgManager = new EnhancedOrgManager(mockContext);
+            fileCompareService = new FileCompareService(enhancedOrgManager);
+            provider = new SfOrgCompareProvider(enhancedOrgManager, fileCompareService);
         });
 
         test('should handle openCompareView command', async () => {
@@ -125,7 +120,7 @@ suite('Extension Test Suite', () => {
                 stdout: JSON.stringify(MockSfCliResponses.orgList(TestData.multipleOrgs(2)))
             });
 
-            const authenticateSpy = sinon.spy(orgManager, 'authenticateOrg');
+            const authenticateSpy = sinon.spy(enhancedOrgManager, 'authenticateOrg');
             const refreshSpy = sinon.spy(provider, 'refresh');
 
             extension.activate(mockContext);
@@ -141,7 +136,7 @@ suite('Extension Test Suite', () => {
                 stdout: JSON.stringify(MockSfCliResponses.orgList(TestData.multipleOrgs(1)))
             });
 
-            const authenticateSpy = sinon.spy(orgManager, 'authenticateOrg');
+            const authenticateSpy = sinon.spy(enhancedOrgManager, 'authenticateOrg');
             const refreshSpy = sinon.spy(provider, 'refresh');
 
             extension.activate(mockContext);

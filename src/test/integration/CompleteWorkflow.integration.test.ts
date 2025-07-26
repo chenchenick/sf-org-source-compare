@@ -4,15 +4,14 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { SfOrgCompareProvider } from '../../providers/SfOrgCompareProvider';
 import { FileCompareService } from '../../services/FileCompareService';
-import { OrgManager } from '../../services/OrgManager';
 import { EnhancedOrgManager } from '../../metadata/EnhancedOrgManager';
 import { SourceRetrievalService } from '../../services/SourceRetrievalService';
+import { ManifestManager } from '../../services/ManifestManager';
 import { SalesforceOrg, TreeItem, ItemType } from '../../types';
 
 suite('Complete Workflow Integration Tests', () => {
     let sfOrgCompareProvider: SfOrgCompareProvider;
     let fileCompareService: FileCompareService;
-    let orgManager: OrgManager;
     let enhancedOrgManager: EnhancedOrgManager;
     let sourceRetrievalService: SourceRetrievalService;
     let mockContext: vscode.ExtensionContext;
@@ -136,11 +135,11 @@ suite('Complete Workflow Integration Tests', () => {
         setupDefaultSfCliMocks();
 
         // Create services
-        orgManager = new OrgManager(mockContext);
         enhancedOrgManager = new EnhancedOrgManager(mockContext);
-        sourceRetrievalService = new SourceRetrievalService();
-        fileCompareService = new FileCompareService(orgManager, enhancedOrgManager);
-        sfOrgCompareProvider = new SfOrgCompareProvider(orgManager, enhancedOrgManager, fileCompareService);
+        const manifestManager = new ManifestManager(mockContext);
+        sourceRetrievalService = new SourceRetrievalService(manifestManager);
+        fileCompareService = new FileCompareService(enhancedOrgManager);
+        sfOrgCompareProvider = new SfOrgCompareProvider(enhancedOrgManager, fileCompareService);
 
         await enhancedOrgManager.initialize();
     });
@@ -215,11 +214,11 @@ suite('Complete Workflow Integration Tests', () => {
     suite('Complete Org Setup Workflow', () => {
         test('should successfully add and initialize org', async () => {
             // Add org
-            await orgManager.addOrg(testOrg1);
-            await orgManager.addOrg(testOrg2);
+            await enhancedOrgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg2);
 
             // Verify orgs are added
-            const orgs = orgManager.getOrgs();
+            const orgs = enhancedOrgManager.getOrgs();
             assert.strictEqual(orgs.length, 2);
             assert.strictEqual(orgs[0].id, testOrg1.id);
             assert.strictEqual(orgs[1].id, testOrg2.id);
@@ -247,7 +246,7 @@ suite('Complete Workflow Integration Tests', () => {
 
     suite('Source Retrieval Workflow', () => {
         test('should retrieve source files for org', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             const sourceDirectory = await enhancedOrgManager.getOrgSourceDirectory(testOrg1.id);
 
@@ -268,7 +267,7 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should cache source directory and reuse', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             // First call
             const sourceDirectory1 = await enhancedOrgManager.getOrgSourceDirectory(testOrg1.id);
@@ -285,7 +284,7 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should refresh org source and clear cache', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             // Initial retrieval
             await enhancedOrgManager.getOrgSourceDirectory(testOrg1.id);
@@ -300,8 +299,8 @@ suite('Complete Workflow Integration Tests', () => {
 
     suite('Tree View and File Navigation', () => {
         test('should provide root tree items', async () => {
-            await orgManager.addOrg(testOrg1);
-            await orgManager.addOrg(testOrg2);
+            await enhancedOrgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg2);
 
             const rootItems = await sfOrgCompareProvider.getChildren();
 
@@ -315,7 +314,7 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should expand org and show source structure', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             // Get org item
             const rootItems = await sfOrgCompareProvider.getChildren();
@@ -338,7 +337,7 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should navigate into folders and show files', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             // Get to classes folder
             const rootItems = await sfOrgCompareProvider.getChildren();
@@ -359,7 +358,7 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should preserve folder expansion state', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             const rootItems = await sfOrgCompareProvider.getChildren();
             const orgsFolder = rootItems.find(item => item.id === 'available-orgs');
@@ -379,8 +378,8 @@ suite('Complete Workflow Integration Tests', () => {
 
     suite('File Selection and Comparison Workflow', () => {
         test('should select files for comparison', async () => {
-            await orgManager.addOrg(testOrg1);
-            await orgManager.addOrg(testOrg2);
+            await enhancedOrgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg2);
 
             // Get file items from both orgs
             const rootItems = await sfOrgCompareProvider.getChildren();
@@ -408,8 +407,8 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should compare selected files using local paths', async () => {
-            await orgManager.addOrg(testOrg1);
-            await orgManager.addOrg(testOrg2);
+            await enhancedOrgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg2);
 
             // Create mock files with local paths
             const mockFile1 = {
@@ -453,7 +452,7 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should handle file opening', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             const mockFile = {
                 id: 'file1',
@@ -487,7 +486,7 @@ suite('Complete Workflow Integration Tests', () => {
                 return mockProcess;
             });
 
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             try {
                 await enhancedOrgManager.getOrgSourceDirectory(testOrg1.id);
@@ -525,7 +524,7 @@ suite('Complete Workflow Integration Tests', () => {
                 }
             });
 
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             try {
                 await enhancedOrgManager.getOrgSourceDirectory(testOrg1.id);
@@ -539,7 +538,7 @@ suite('Complete Workflow Integration Tests', () => {
             mockExistsSync.returns(false);
             mockMkdirSync.throws(new Error('Permission denied'));
 
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             try {
                 await enhancedOrgManager.getOrgSourceDirectory(testOrg1.id);
@@ -551,7 +550,7 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should recover from org refresh errors', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             // Initial successful retrieval
             await enhancedOrgManager.getOrgSourceDirectory(testOrg1.id);
@@ -573,7 +572,7 @@ suite('Complete Workflow Integration Tests', () => {
 
     suite('Performance and Caching', () => {
         test('should deduplicate concurrent retrievals', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             // Start multiple concurrent retrievals
             const promises = [
@@ -615,7 +614,7 @@ suite('Complete Workflow Integration Tests', () => {
                 }
             });
 
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             const startTime = Date.now();
             const rootItems = await sfOrgCompareProvider.getChildren();
@@ -630,7 +629,7 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should cleanup resources properly', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
             await enhancedOrgManager.getOrgSourceDirectory(testOrg1.id);
 
             // Mock cleanup
@@ -647,7 +646,7 @@ suite('Complete Workflow Integration Tests', () => {
 
     suite('User Experience Features', () => {
         test('should provide helpful error messages', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             // Mock authentication error
             mockSpawn.callsFake(() => {
@@ -671,8 +670,8 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should show progress during long operations', async () => {
-            await orgManager.addOrg(testOrg1);
-            await orgManager.addOrg(testOrg2);
+            await enhancedOrgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg2);
 
             // Mock files for comparison
             const file1 = {
@@ -704,7 +703,7 @@ suite('Complete Workflow Integration Tests', () => {
         });
 
         test('should update UI state appropriately', async () => {
-            await orgManager.addOrg(testOrg1);
+            await enhancedOrgManager.addOrg(testOrg1);
 
             // Test tree view refresh
             sfOrgCompareProvider.refreshTreeView();

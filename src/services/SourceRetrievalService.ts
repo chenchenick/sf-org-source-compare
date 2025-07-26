@@ -4,6 +4,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { spawn } from 'child_process';
 import { SalesforceOrg, OrgFile } from '../types';
+import { ConfigurationManager, SF_CONFIG } from '../config';
+import { ErrorHandler, ErrorType, ErrorHandlingStrategy, ErrorUtils } from '../errors/ErrorHandler';
+import { ManifestManager } from './ManifestManager';
 
 /**
  * Service for retrieving source code from Salesforce orgs using SFDX manifest approach
@@ -13,9 +16,15 @@ export class SourceRetrievalService {
     private orgTempDirs: Map<string, string> = new Map();
     private cliCommand: string | null = null;
     private activeRetrievals: Map<string, Promise<string>> = new Map();
+    private config: ConfigurationManager;
+    private errorHandler: ErrorHandler;
+    private manifestManager: ManifestManager;
 
-    constructor() {
-        this.tempDir = path.join(os.tmpdir(), 'sf-org-compare');
+    constructor(manifestManager: ManifestManager) {
+        this.manifestManager = manifestManager;
+        this.config = ConfigurationManager.getInstance();
+        this.errorHandler = ErrorHandler.getInstance();
+        this.tempDir = path.join(os.tmpdir(), SF_CONFIG.FS.TEMP_DIR_PREFIX);
         this.ensureTempDirectory();
     }
 
@@ -41,6 +50,10 @@ export class SourceRetrievalService {
             const result = await retrievalPromise;
             console.log(`✅ COMPLETED RETRIEVAL for org: ${org.alias || org.username}`);
             return result;
+        } catch (error) {
+            // Use standardized error handling
+            const standardError = this.errorHandler.standardizeError(error as Error, `retrieveOrgSource for ${org.alias || org.username}`);
+            throw standardError;
         } finally {
             // Remove from active retrievals when done
             this.activeRetrievals.delete(org.id);
@@ -62,9 +75,10 @@ export class SourceRetrievalService {
             // Initialize SFDX project structure if needed
             await this.ensureProjectStructure(orgTempDir);
 
-            // Create package.xml manifest
-            const manifestPath = await this.createManifest(orgTempDir);
-            console.log(`Created manifest at: ${manifestPath}`);
+            // Create package.xml manifest using ManifestManager
+            console.log(`🚨 ABOUT TO CALL createManifest for org: ${org.alias || org.username}`);
+            const manifestPath = await this.createManifest(org, orgTempDir);
+            console.log(`🚨 RETURNED FROM createManifest: ${manifestPath}`);
 
             // Retrieve source using manifest
             await this.executeSourceRetrieval(org, manifestPath, orgTempDir);
@@ -72,11 +86,43 @@ export class SourceRetrievalService {
             // Return the path to the source directory
             const sourceDir = path.join(orgTempDir, 'force-app', 'main', 'default');
             console.log(`Source retrieval complete for ${org.alias || org.username}: ${sourceDir}`);
+            
+            // Debug: Log what was actually retrieved
+            try {
+                if (fs.existsSync(sourceDir)) {
+                    const retrievedDirs = fs.readdirSync(sourceDir);
+                    console.log(`📁 Retrieved directories: ${retrievedDirs.join(', ')}`);
+                    
+                    // Look for testSuites directory specifically
+                    const testSuitesDir = path.join(sourceDir, 'testSuites');
+                    if (fs.existsSync(testSuitesDir)) {
+                        const testSuites = fs.readdirSync(testSuitesDir);
+                        console.log(`🧪 Test suites found: ${testSuites.join(', ')}`);
+                    } else {
+                        console.log(`❌ No testSuites directory found at: ${testSuitesDir}`);
+                    }
+                } else {
+                    console.log(`❌ Source directory does not exist: ${sourceDir}`);
+                }
+            } catch (error) {
+                console.warn('Error during retrieval debugging:', error);
+            }
 
             return sourceDir;
         } catch (error) {
             console.error(`Error retrieving source for org ${org.alias || org.username}:`, error);
-            throw error;
+            
+            // Create a standardized metadata retrieval error
+            const standardError = ErrorUtils.createMetadataError(
+                `Failed to retrieve source for org: ${error instanceof Error ? error.message : String(error)}`,
+                {
+                    orgId: org.id,
+                    orgAlias: org.alias,
+                    orgUsername: org.username
+                }
+            );
+            
+            throw new Error(standardError.userMessage || standardError.message);
         }
     }
 
@@ -96,7 +142,7 @@ export class SourceRetrievalService {
                         }
                     ],
                     namespace: '',
-                    sourceApiVersion: '58.0'
+                    sourceApiVersion: this.config.getApiVersion()
                 };
                 await fs.promises.writeFile(projectConfigPath, JSON.stringify(projectConfig, null, 2), 'utf8');
                 console.log(`Created sfdx-project.json at: ${projectConfigPath}`);
@@ -119,13 +165,151 @@ export class SourceRetrievalService {
     }
 
     /**
-     * Create package.xml manifest for comprehensive metadata retrieval
+     * Create package.xml manifest using ManifestManager or default fallback
      */
-    private async createManifest(orgTempDir: string): Promise<string> {
+    private async createManifest(org: SalesforceOrg, orgTempDir: string): Promise<string> {
         // Ensure the directory exists before creating the manifest
         this.ensureDirectory(orgTempDir);
         
-        const manifestContent = `<?xml version="1.0" encoding="UTF-8"?>
+        try {
+            // EXPLICIT DEBUG: Verify ManifestManager is being used
+            console.log(`🚨 USING MANIFESTMANAGER FOR ORG: ${org.alias || org.username} (${org.id})`);
+            console.log(`🚨 ManifestManager instance:`, !!this.manifestManager);
+            
+            // Use ManifestManager to generate manifest content based on org configuration
+            const manifestContent = this.manifestManager.generateManifest(org.id);
+            const manifestPath = path.join(orgTempDir, 'package.xml');
+            
+            await fs.promises.writeFile(manifestPath, manifestContent, 'utf8');
+            console.log(`📝 Manifest written to: ${manifestPath} using ManifestManager`);
+            
+            // Log enabled metadata types for debugging
+            const enabledTypes = this.manifestManager.getEnabledMetadataTypes(org.id);
+            console.log(`🔧 Enabled metadata types for ${org.alias || org.username}:`, 
+                enabledTypes.map(t => t.name).join(', '));
+            
+            // Log the actual manifest content for debugging
+            console.log(`📄 Generated manifest content:\n${manifestContent}`);
+            
+            // EXPLICIT DEBUG: List available metadata types from org
+            await this.listOrgMetadataTypes(org, orgTempDir);
+            
+            return manifestPath;
+        } catch (error) {
+            console.error('🚨 MANIFESTMANAGER FAILED! Using fallback manifest:', error);
+            console.error('🚨 This means TestSuite will NOT be included!');
+            // Fallback to default manifest if ManifestManager fails
+            return this.createDefaultManifest(org, orgTempDir);
+        }
+    }
+
+    /**
+     * Create default manifest as fallback
+     */
+    private async createDefaultManifest(org: SalesforceOrg, orgTempDir: string): Promise<string> {
+        console.log(`🚨 CREATING DEFAULT MANIFEST (NOT using ManifestManager configuration!)`);
+        const manifestContent = this.generateDefaultManifest();
+        const manifestPath = path.join(orgTempDir, 'package.xml');
+        
+        await fs.promises.writeFile(manifestPath, manifestContent, 'utf8');
+        console.log(`📝 Default manifest written to: ${manifestPath}`);
+        console.log(`🚨 DEFAULT MANIFEST CONTENT:\n${manifestContent}`);
+        
+        return manifestPath;
+    }
+
+    /**
+     * List available metadata types from the org for debugging
+     */
+    private async listOrgMetadataTypes(org: SalesforceOrg, orgTempDir: string): Promise<void> {
+        try {
+            console.log(`🔍 Listing metadata types available in org: ${org.alias || org.username}`);
+            
+            if (!this.cliCommand) {
+                console.warn('CLI command not available for metadata type listing');
+                return;
+            }
+
+            const orgIdentifier = org.alias || org.username;
+            const args = [
+                'org', 'list', 'metadata-types',
+                '--target-org', orgIdentifier,
+                '--json'
+            ];
+
+            console.log(`Executing: ${this.cliCommand} ${args.join(' ')}`);
+
+            return new Promise((resolve) => {
+                const childProcess = spawn(this.cliCommand!, args, { 
+                    cwd: orgTempDir,
+                    stdio: 'pipe',
+                    env: { ...process.env },
+                    shell: true
+                });
+
+                let stdout = '';
+                let stderr = '';
+
+                childProcess.stdout?.on('data', (data) => {
+                    stdout += data.toString();
+                });
+
+                childProcess.stderr?.on('data', (data) => {
+                    stderr += data.toString();
+                });
+
+                childProcess.on('close', (code: number) => {
+                    if (code === 0 && stdout.trim()) {
+                        try {
+                            const response = JSON.parse(stdout);
+                            if (response.result && response.result.metadataTypes) {
+                                const testSuiteTypes = response.result.metadataTypes.filter((type: any) => 
+                                    type.xmlName && type.xmlName.toLowerCase().includes('test')
+                                );
+                                
+                                console.log(`🧪 Test-related metadata types found:`, 
+                                    testSuiteTypes.map((t: any) => `${t.xmlName} (${t.directoryName})`).join(', '));
+                                
+                                const apexTestSuite = response.result.metadataTypes.find((type: any) => 
+                                    type.xmlName === 'ApexTestSuite'
+                                );
+                                
+                                if (apexTestSuite) {
+                                    console.log(`✅ ApexTestSuite found! Directory: ${apexTestSuite.directoryName}, Suffix: ${apexTestSuite.suffix}`);
+                                } else {
+                                    console.log(`❌ ApexTestSuite NOT found in org metadata types`);
+                                }
+                            }
+                        } catch (parseError) {
+                            console.warn('Could not parse metadata types response:', parseError);
+                        }
+                    } else {
+                        console.warn('Failed to list metadata types:', stderr);
+                    }
+                    resolve();
+                });
+
+                childProcess.on('error', (error) => {
+                    console.warn('Error listing metadata types:', error);
+                    resolve();
+                });
+                
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    childProcess.kill();
+                    resolve();
+                }, 10000);
+            });
+        } catch (error) {
+            console.warn('Error in listOrgMetadataTypes:', error);
+        }
+    }
+
+    /**
+     * Generate default comprehensive manifest (fallback when ManifestManager is not available)
+     */
+    private generateDefaultManifest(): string {
+        return `<?xml version="1.0" encoding="UTF-8"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
     <!-- Apex Classes and Triggers -->
     <types>
@@ -152,71 +336,27 @@ export class SourceRetrievalService {
         <members>*</members>
         <name>CustomObject</name>
     </types>
-    <types>
-        <members>*</members>
-        <name>CustomField</name>
-    </types>
     
-    <!-- Flows and Process Builder -->
+    <!-- Flows -->
     <types>
         <members>*</members>
         <name>Flow</name>
     </types>
     
-    <!-- Layouts and Page Layouts -->
+    <!-- Layouts -->
     <types>
         <members>*</members>
         <name>Layout</name>
     </types>
     
-    <!-- Permission Sets and Profiles -->
+    <!-- Permission Sets -->
     <types>
         <members>*</members>
         <name>PermissionSet</name>
     </types>
-    <types>
-        <members>*</members>
-        <name>Profile</name>
-    </types>
     
-    <!-- Email Templates -->
-    <types>
-        <members>*</members>
-        <name>EmailTemplate</name>
-    </types>
-    
-    <!-- Reports and Dashboards -->
-    <types>
-        <members>*</members>
-        <name>Report</name>
-    </types>
-    <types>
-        <members>*</members>
-        <name>Dashboard</name>
-    </types>
-    
-    <!-- Static Resources -->
-    <types>
-        <members>*</members>
-        <name>StaticResource</name>
-    </types>
-    
-    <!-- Custom Labels and Metadata -->
-    <types>
-        <members>*</members>
-        <name>CustomLabels</name>
-    </types>
-    <types>
-        <members>*</members>
-        <name>CustomMetadata</name>
-    </types>
-    
-    <version>58.0</version>
+    <version>${this.config.getApiVersion()}</version>
 </Package>`;
-
-        const manifestPath = path.join(orgTempDir, 'package.xml');
-        await fs.promises.writeFile(manifestPath, manifestContent, 'utf8');
-        return manifestPath;
     }
 
     /**
@@ -259,7 +399,7 @@ export class SourceRetrievalService {
                     childProcess.kill();
                     resolve(false);
                 }
-            }, 5000);
+            }, SF_CONFIG.TIMEOUTS.PROCESS_KILL);
 
             childProcess.on('close', (code: number) => {
                 if (!resolved) {
@@ -318,7 +458,7 @@ export class SourceRetrievalService {
                     processCompleted = true;
                     reject(new Error('Command timeout - SF CLI command took too long to execute'));
                 }
-            }, 60000); // 60 second timeout
+            }, this.config.getTimeout('cli_command')); // CLI command timeout
 
             childProcess.stdout?.on('data', (data: any) => {
                 const chunk = data.toString();
@@ -343,6 +483,24 @@ export class SourceRetrievalService {
                     
                     if (code === 0) {
                         console.log(`Source retrieval successful for ${orgIdentifier}`);
+                        
+                        // Parse and log the JSON response for debugging
+                        try {
+                            if (stdout.trim()) {
+                                const response = JSON.parse(stdout);
+                                console.log(`📊 SFDX Response Status: ${response.status}`);
+                                if (response.result) {
+                                    console.log(`📦 Retrieved files count: ${response.result.length || 0}`);
+                                    if (response.result.length > 0) {
+                                        console.log(`📄 Retrieved files:`, response.result.map((f: any) => f.fullName || f.fileName).join(', '));
+                                    }
+                                }
+                            }
+                        } catch (parseError) {
+                            console.warn('Could not parse SFDX JSON response:', parseError);
+                            console.log(`Raw STDOUT: ${stdout.substring(0, 500)}...`);
+                        }
+                        
                         resolve();
                     } else {
                         console.error(`Source retrieval failed for ${orgIdentifier}. Exit code: ${code}`);

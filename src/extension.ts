@@ -1,150 +1,224 @@
 import * as vscode from 'vscode';
+import { initializeContainer, Container, ServiceFactory, ServiceTokens } from './di';
 import { SfOrgCompareProvider } from './providers/SfOrgCompareProvider';
-import { OrgManager } from './services/OrgManager';
 import { EnhancedOrgManager } from './metadata/EnhancedOrgManager';
 import { FileCompareService } from './services/FileCompareService';
+import { ManifestConfigurationWebview } from './webview/ManifestConfigurationWebview';
+import { UserPreferencesWebview } from './webview/UserPreferencesWebview';
+import { UserErrorReporter } from './errors/UserErrorReporter';
 
-// Store service instances for cleanup
+// Store DI container and service instances for cleanup
+let container: Container;
+let serviceFactory: ServiceFactory;
 let fileCompareService: FileCompareService;
 let enhancedOrgManager: EnhancedOrgManager;
+let manifestConfigWebview: ManifestConfigurationWebview;
+let userPreferencesWebview: UserPreferencesWebview;
+let userErrorReporter: UserErrorReporter;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 	console.log('🚀 Salesforce Org Source Compare extension is now active!');
 	vscode.window.showInformationMessage('SF Org Compare extension activated!');
 
-	// Initialize enhanced org manager with comprehensive metadata support
-	enhancedOrgManager = new EnhancedOrgManager(context);
-	
-	// Initialize enhanced org manager asynchronously
-	enhancedOrgManager.initialize().then(() => {
-		console.log('✅ Enhanced metadata system initialized');
-		const configSummary = enhancedOrgManager.getConfigurationSummary();
-		console.log(`📊 Metadata support: ${configSummary.enabledTypes} enabled types, ${configSummary.handlerCount} handlers`);
-	}).catch(error => {
-		console.error('❌ Failed to initialize enhanced metadata system:', error);
-		vscode.window.showErrorMessage('Failed to initialize enhanced metadata system. Some features may be limited.');
-	});
+	try {
+		// Initialize dependency injection container
+		const diContainer = initializeContainer(context);
+		container = diContainer.container;
+		serviceFactory = diContainer.serviceFactory;
 
-	// For backward compatibility, also create the old OrgManager
-	const orgManager = new OrgManager(context);
-	fileCompareService = new FileCompareService(orgManager, enhancedOrgManager);
-	const sfOrgCompareProvider = new SfOrgCompareProvider(orgManager, enhancedOrgManager, fileCompareService);
+		// Create core services using DI
+		const coreServices = await serviceFactory.createCoreServices();
+		enhancedOrgManager = coreServices.enhancedOrgManager;
+		fileCompareService = coreServices.fileCompareService;
+		const sfOrgCompareProvider = coreServices.sfOrgCompareProvider;
+		
+		// Create webview services
+		manifestConfigWebview = container.resolve<ManifestConfigurationWebview>(ServiceTokens.MANIFEST_CONFIGURATION_WEBVIEW);
+		userPreferencesWebview = container.resolve<UserPreferencesWebview>(ServiceTokens.USER_PREFERENCES_WEBVIEW);
+		
+		// Create error reporting service
+		userErrorReporter = container.resolve<UserErrorReporter>(ServiceTokens.USER_ERROR_REPORTER);
 
-	// Cleanup old sessions on startup
-	FileCompareService.cleanupOldSessions().catch(error => {
-		console.warn('Failed to cleanup old sessions on startup:', error);
-	});
+		console.log('📋 Registering tree data provider...');
+		vscode.window.registerTreeDataProvider('sfOrgCompareView', sfOrgCompareProvider);
+		console.log('✅ Tree data provider registered!');
 
-	console.log('📋 Registering tree data provider...');
-	vscode.window.registerTreeDataProvider('sfOrgCompareView', sfOrgCompareProvider);
-	console.log('✅ Tree data provider registered!');
+		// Register commands
+		const openCompareView = vscode.commands.registerCommand('sf-org-source-compare.openCompareView', () => {
+			vscode.commands.executeCommand('sfOrgCompareView.focus');
+		});
 
-	const openCompareView = vscode.commands.registerCommand('sf-org-source-compare.openCompareView', () => {
-		vscode.commands.executeCommand('sfOrgCompareView.focus');
-	});
+		const refreshOrgs = vscode.commands.registerCommand('sf-org-source-compare.refreshOrgs', async () => {
+			await sfOrgCompareProvider.refresh();
+		});
 
-	const refreshOrgs = vscode.commands.registerCommand('sf-org-source-compare.refreshOrgs', async () => {
-		await sfOrgCompareProvider.refresh();
-	});
+		const refreshTreeView = vscode.commands.registerCommand('sf-org-source-compare.refreshTreeView', () => {
+			sfOrgCompareProvider.refreshTreeView();
+		});
 
-	const refreshTreeView = vscode.commands.registerCommand('sf-org-source-compare.refreshTreeView', () => {
-		sfOrgCompareProvider.refreshTreeView();
-	});
+		const refreshOrg = vscode.commands.registerCommand('sf-org-source-compare.refreshOrg', async (orgItem) => {
+			if (orgItem && orgItem.orgId) {
+				await sfOrgCompareProvider.refreshOrg(orgItem.orgId);
+			}
+		});
 
-	const refreshOrg = vscode.commands.registerCommand('sf-org-source-compare.refreshOrg', async (orgItem) => {
-		if (orgItem && orgItem.orgId) {
-			await sfOrgCompareProvider.refreshOrg(orgItem.orgId);
-		}
-	});
+		const compareFiles = vscode.commands.registerCommand('sf-org-source-compare.compareFiles', () => {
+			fileCompareService.compareSelectedFiles();
+		});
 
-	const compareFiles = vscode.commands.registerCommand('sf-org-source-compare.compareFiles', () => {
-		fileCompareService.compareSelectedFiles();
-	});
+		const selectOrg = vscode.commands.registerCommand('sf-org-source-compare.selectOrg', (orgItem) => {
+			if (orgItem.id === 'no-orgs') {
+				enhancedOrgManager.authenticateOrg().then(async () => {
+					await sfOrgCompareProvider.refresh();
+				});
+			} else {
+				sfOrgCompareProvider.selectOrg(orgItem);
+			}
+		});
 
-	const selectOrg = vscode.commands.registerCommand('sf-org-source-compare.selectOrg', (orgItem) => {
-		if (orgItem.id === 'no-orgs') {
-			orgManager.authenticateOrg().then(async () => {
-				await sfOrgCompareProvider.refresh();
-			});
+		const selectFile = vscode.commands.registerCommand('sf-org-source-compare.selectFile', (fileItem) => {
+			if (!fileItem.file) {
+				return;
+			}
+
+			fileCompareService.selectFile(fileItem.file);
+		});
+
+		const openFile = vscode.commands.registerCommand('sf-org-source-compare.openFile', async (fileItem) => {
+			if (!fileItem.file || !fileItem.file.filePath) {
+				await userErrorReporter.reportError(
+					new Error('File path not available'),
+					'Opening file'
+				);
+				return;
+			}
+
+			try {
+				const fileUri = vscode.Uri.file(fileItem.file.filePath);
+				await vscode.window.showTextDocument(fileUri);
+			} catch (error) {
+				await userErrorReporter.reportFileSystemError(
+					fileItem.file.filePath,
+					'opening file',
+					error as Error
+				);
+			}
+		});
+
+		const addOrg = vscode.commands.registerCommand('sf-org-source-compare.addOrg', async () => {
+			await enhancedOrgManager.authenticateOrg();
+			await sfOrgCompareProvider.refresh();
+		});
+
+		const deleteOrg = vscode.commands.registerCommand('sf-org-source-compare.deleteOrg', async (orgItem) => {
+			await sfOrgCompareProvider.deleteOrg(orgItem);
+		});
+
+		const clearSelection = vscode.commands.registerCommand('sf-org-source-compare.clearSelection', () => {
+			fileCompareService.clearSelection();
+			vscode.window.showInformationMessage('File selection cleared');
+		});
+
+		const cleanupTempFiles = vscode.commands.registerCommand('sf-org-source-compare.cleanupTempFiles', async () => {
+			try {
+				await fileCompareService.cleanup();
+				await FileCompareService.cleanupOldSessions();
+				vscode.window.showInformationMessage('Temporary files cleaned up successfully');
+			} catch (error) {
+				await userErrorReporter.reportOperationFailure(
+					'Cleanup temporary files',
+					error as Error
+				);
+			}
+		});
+
+		const configureManifest = vscode.commands.registerCommand('sf-org-source-compare.configureManifest', async (orgItem) => {
+			try {
+				const orgId = orgItem?.orgId;
+				await manifestConfigWebview.show(orgId);
+			} catch (error) {
+				await userErrorReporter.reportOperationFailure(
+					'Open manifest configuration',
+					error as Error
+				);
+			}
+		});
+
+		const openUserPreferences = vscode.commands.registerCommand('sf-org-source-compare.openUserPreferences', async (categoryId?: string) => {
+			try {
+				await userPreferencesWebview.show(categoryId);
+			} catch (error) {
+				await userErrorReporter.reportOperationFailure(
+					'Open user preferences',
+					error as Error
+				);
+			}
+		});
+
+		// Register all commands with VS Code
+		context.subscriptions.push(
+			openCompareView,
+			refreshOrgs,
+			refreshTreeView,
+			refreshOrg,
+			compareFiles,
+			selectOrg,
+			selectFile,
+			openFile,
+			addOrg,
+			deleteOrg,
+			clearSelection,
+			cleanupTempFiles,
+			configureManifest,
+			openUserPreferences
+		);
+
+		console.log('✅ Extension activation completed successfully with DI');
+
+	} catch (error) {
+		console.error('❌ Failed to activate extension:', error);
+		
+		// Try to use enhanced error reporting if available, otherwise fall back to basic message
+		if (userErrorReporter) {
+			await userErrorReporter.reportOperationFailure('Activate extension', error as Error);
 		} else {
-			sfOrgCompareProvider.selectOrg(orgItem);
+			vscode.window.showErrorMessage(`Failed to activate SF Org Compare extension: ${error}`);
 		}
-	});
-
-	const selectFile = vscode.commands.registerCommand('sf-org-source-compare.selectFile', (fileItem) => {
-		if (!fileItem.file) {
-			return;
+		
+		// Cleanup on activation failure
+		if (container) {
+			await container.dispose();
 		}
-
-		fileCompareService.selectFile(fileItem.file);
-	});
-
-	const openFile = vscode.commands.registerCommand('sf-org-source-compare.openFile', async (fileItem) => {
-		if (!fileItem.file || !fileItem.file.filePath) {
-			vscode.window.showErrorMessage('File path not available');
-			return;
-		}
-
-		try {
-			const fileUri = vscode.Uri.file(fileItem.file.filePath);
-			await vscode.window.showTextDocument(fileUri);
-		} catch (error) {
-			vscode.window.showErrorMessage(`Failed to open file: ${error}`);
-		}
-	});
-
-	const addOrg = vscode.commands.registerCommand('sf-org-source-compare.addOrg', async () => {
-		await orgManager.authenticateOrg();
-		await sfOrgCompareProvider.refresh();
-	});
-
-	const deleteOrg = vscode.commands.registerCommand('sf-org-source-compare.deleteOrg', async (orgItem) => {
-		await sfOrgCompareProvider.deleteOrg(orgItem);
-	});
-
-	const clearSelection = vscode.commands.registerCommand('sf-org-source-compare.clearSelection', () => {
-		fileCompareService.clearSelection();
-		vscode.window.showInformationMessage('File selection cleared');
-	});
-
-	const cleanupTempFiles = vscode.commands.registerCommand('sf-org-source-compare.cleanupTempFiles', async () => {
-		try {
-			await fileCompareService.cleanup();
-			await FileCompareService.cleanupOldSessions();
-			vscode.window.showInformationMessage('Temporary files cleaned up successfully');
-		} catch (error) {
-			vscode.window.showErrorMessage(`Failed to cleanup temporary files: ${error}`);
-		}
-	});
-
-	context.subscriptions.push(
-		openCompareView,
-		refreshOrgs,
-		refreshTreeView,
-		refreshOrg,
-		compareFiles,
-		selectOrg,
-		selectFile,
-		openFile,
-		addOrg,
-		deleteOrg,
-		clearSelection,
-		cleanupTempFiles
-	);
+		throw error;
+	}
 }
 
 export async function deactivate() {
 	console.log('🧹 Deactivating SF Org Compare extension...');
 	
-	// Cleanup temporary files
-	if (fileCompareService) {
-		try {
-			await fileCompareService.cleanup();
-			console.log('✅ Temporary files cleaned up successfully');
-		} catch (error) {
-			console.error('❌ Failed to cleanup temporary files:', error);
+	try {
+		// Cleanup temporary files
+		if (fileCompareService) {
+			try {
+				await fileCompareService.cleanup();
+				console.log('✅ Temporary files cleaned up successfully');
+			} catch (error) {
+				console.error('❌ Failed to cleanup temporary files:', error);
+			}
 		}
+
+		// Dispose of DI container and all managed services
+		if (container) {
+			try {
+				await container.dispose();
+				console.log('✅ DI container and services disposed successfully');
+			} catch (error) {
+				console.error('❌ Failed to dispose DI container:', error);
+			}
+		}
+	} catch (error) {
+		console.error('❌ Error during deactivation:', error);
 	}
 	
-	console.log('👋 SF Org Compare extension deactivated');
+	console.log('👋 SF Org Source Compare extension deactivated');
 }

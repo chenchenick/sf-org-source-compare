@@ -4,7 +4,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { SourceRetrievalService } from '../../services/SourceRetrievalService';
+import { ManifestManager } from '../../services/ManifestManager';
 import { SalesforceOrg, OrgFile } from '../../types';
+import * as vscode from 'vscode';
 
 suite('SourceRetrievalService Tests', () => {
     let sourceRetrieval: SourceRetrievalService;
@@ -36,7 +38,17 @@ suite('SourceRetrievalService Tests', () => {
 
     setup(() => {
         sinon.reset();
-        sourceRetrieval = new SourceRetrievalService();
+        
+        // Create mock context
+        const mockContext = {
+            globalState: {
+                get: sinon.stub().returns({}),
+                update: sinon.stub().resolves()
+            }
+        } as any as vscode.ExtensionContext;
+        
+        const manifestManager = new ManifestManager(mockContext);
+        sourceRetrieval = new SourceRetrievalService(manifestManager);
 
         // Mock spawn for SF CLI commands
         mockSpawn = sinon.stub(require('child_process'), 'spawn');
@@ -166,7 +178,7 @@ suite('SourceRetrievalService Tests', () => {
             assert.ok(mockWriteFile.called);
             const writeFileCall = mockWriteFile.getCall(0);
             const projectConfig = JSON.parse(writeFileCall.args[1]);
-            assert.strictEqual(projectConfig.sourceApiVersion, '58.0');
+            assert.ok(projectConfig.sourceApiVersion); // Should use configured API version
             assert.strictEqual(projectConfig.packageDirectories[0].path, 'force-app');
         });
 
@@ -226,7 +238,7 @@ suite('SourceRetrievalService Tests', () => {
             assert.ok(manifestContent.includes('<name>ApexClass</name>'));
             assert.ok(manifestContent.includes('<name>LightningComponentBundle</name>'));
             assert.ok(manifestContent.includes('<name>CustomObject</name>'));
-            assert.ok(manifestContent.includes('<version>58.0</version>'));
+            assert.ok(manifestContent.includes('<version>')); // Should use configured API version
         });
     });
 

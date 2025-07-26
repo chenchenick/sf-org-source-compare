@@ -1,5 +1,7 @@
 import { ContentRequest, ContentResponse, MetadataQueryOptions, ProcessingResult, OrgFile, BundleContent } from '../types';
 import { MetadataRegistry } from './MetadataRegistry';
+import { ConfigurationManager } from '../config';
+import { SecureCommandExecutor } from '../security/SecureCommandExecutor';
 
 /**
  * Parallel processing framework for metadata operations
@@ -7,11 +9,15 @@ import { MetadataRegistry } from './MetadataRegistry';
  */
 export class ParallelProcessor {
     private registry: MetadataRegistry;
-    private defaultConcurrency: number = 5;
-    private defaultTimeout: number = 30000;
+    private config: ConfigurationManager;
+    private defaultConcurrency: number;
+    private defaultTimeout: number;
 
     constructor(registry?: MetadataRegistry) {
         this.registry = registry || MetadataRegistry.getInstance();
+        this.config = ConfigurationManager.getInstance();
+        this.defaultConcurrency = this.config.getMaxConcurrentRequests();
+        this.defaultTimeout = this.config.getTimeout('default');
     }
 
     /**
@@ -201,18 +207,18 @@ export class ParallelProcessor {
     }
 
     /**
-     * Execute SF CLI commands in parallel with rate limiting
+     * Execute SF CLI commands in parallel with rate limiting (DEPRECATED)
+     * @deprecated Use SecureCommandExecutor.executeCommand directly instead
      */
     public async executeSfCommandsParallel(
         commands: string[],
         maxConcurrency: number = this.defaultConcurrency
     ): Promise<ProcessingResult<{ command: string; result: any }>> {
+        console.warn('executeSfCommandsParallel is deprecated. Use SecureCommandExecutor.executeCommand directly instead.');
+        
         const startTime = Date.now();
         const results: { command: string; result: any }[] = [];
         const failures: { item: any; error: string }[] = [];
-
-        const util = require('util');
-        const exec = util.promisify(require('child_process').exec);
 
         // Process commands in chunks to control concurrency
         const chunks = this.chunkArray(commands, maxConcurrency);
@@ -220,9 +226,19 @@ export class ParallelProcessor {
         for (const chunk of chunks) {
             const promises = chunk.map(async (command) => {
                 try {
-                    const result = await exec(command, { 
+                    // Parse command string into command and arguments
+                    const parts = command.trim().split(/\s+/);
+                    if (parts.length === 0) {
+                        throw new Error('Invalid command: empty command string');
+                    }
+
+                    const baseCommand = parts[0];
+                    const args = parts.slice(1);
+
+                    const result = await SecureCommandExecutor.executeCommand(baseCommand, args, { 
                         timeout: this.defaultTimeout 
                     });
+                    
                     return { command, result: JSON.parse(result.stdout) };
                 } catch (error) {
                     failures.push({ 

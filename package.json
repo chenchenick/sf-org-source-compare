@@ -97,6 +97,18 @@
         "title": "Refresh Organization",
         "category": "SF Org Compare",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "sf-org-source-compare.configureManifest",
+        "title": "Configure Manifest",
+        "category": "SF Org Compare",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "sf-org-source-compare.openUserPreferences",
+        "title": "User Preferences",
+        "category": "SF Org Compare",
+        "icon": "$(preferences-open)"
       }
     ],
     "viewsContainers": {
@@ -143,9 +155,24 @@
           "command": "sf-org-source-compare.cleanupTempFiles",
           "when": "view == sfOrgCompareView",
           "group": "navigation"
+        },
+        {
+          "command": "sf-org-source-compare.configureManifest",
+          "when": "view == sfOrgCompareView",
+          "group": "configuration"
+        },
+        {
+          "command": "sf-org-source-compare.openUserPreferences",
+          "when": "view == sfOrgCompareView",
+          "group": "configuration"
         }
       ],
       "view/item/context": [
+        {
+          "command": "sf-org-source-compare.configureManifest",
+          "when": "view == sfOrgCompareView && viewItem == availableOrg",
+          "group": "inline"
+        },
         {
           "command": "sf-org-source-compare.refreshOrg",
           "when": "view == sfOrgCompareView && viewItem == availableOrg",
@@ -155,6 +182,11 @@
           "command": "sf-org-source-compare.deleteOrg",
           "when": "view == sfOrgCompareView && viewItem == availableOrg",
           "group": "inline"
+        },
+        {
+          "command": "sf-org-source-compare.configureManifest",
+          "when": "view == sfOrgCompareView && viewItem == availableOrg",
+          "group": "configure"
         },
         {
           "command": "sf-org-source-compare.selectFile",
@@ -180,7 +212,115 @@
           "light": "#cc0033"
         }
       }
-    ]
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Salesforce Org Source Compare",
+      "properties": {
+        "sfOrgSourceCompare.apiVersion": {
+          "type": "string",
+          "enum": ["58.0", "59.0", "60.0", "61.0"],
+          "default": "58.0",
+          "description": "Salesforce API version to use for metadata operations",
+          "enumDescriptions": [
+            "Winter '24 (58.0)",
+            "Spring '24 (59.0)", 
+            "Summer '24 (60.0)",
+            "Winter '25 (61.0)"
+          ]
+        },
+        "sfOrgSourceCompare.defaultTimeout": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 5000,
+          "maximum": 300000,
+          "description": "Default timeout for operations in milliseconds"
+        },
+        "sfOrgSourceCompare.extendedTimeout": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 10000,
+          "maximum": 600000,
+          "description": "Extended timeout for large operations in milliseconds"
+        },
+        "sfOrgSourceCompare.maxConcurrentRequests": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum number of concurrent API requests"
+        },
+        "sfOrgSourceCompare.cacheTtl": {
+          "type": "number",
+          "default": 1800000,
+          "minimum": 60000,
+          "maximum": 3600000,
+          "description": "Cache time-to-live in milliseconds (30 minutes default)"
+        },
+        "sfOrgSourceCompare.enabledMetadataTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ApexClass",
+              "ApexTrigger", 
+              "LightningComponentBundle",
+              "AuraDefinitionBundle",
+              "CustomObject",
+              "Flow",
+              "Layout",
+              "PermissionSet",
+              "Profile",
+              "CustomField",
+              "ValidationRule",
+              "WorkflowRule",
+              "StaticResource",
+              "CustomTab",
+              "CustomApplication",
+              "CustomLabel",
+              "EmailTemplate",
+              "Report",
+              "Dashboard"
+            ]
+          },
+          "default": [
+            "ApexClass",
+            "ApexTrigger",
+            "LightningComponentBundle", 
+            "AuraDefinitionBundle",
+            "CustomObject",
+            "Flow",
+            "Layout",
+            "PermissionSet",
+            "Profile"
+          ],
+          "description": "List of metadata types to retrieve from organizations"
+        },
+        "sfOrgSourceCompare.autoRefresh": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically refresh org data when extension starts"
+        },
+        "sfOrgSourceCompare.showProgress": {
+          "type": "boolean", 
+          "default": true,
+          "description": "Show progress indicators for long-running operations"
+        },
+        "sfOrgSourceCompare.logLevel": {
+          "type": "string",
+          "enum": ["error", "warn", "info", "debug", "trace"],
+          "default": "info",
+          "description": "Logging level for extension output",
+          "enumDescriptions": [
+            "Only errors",
+            "Errors and warnings",
+            "Errors, warnings, and info",
+            "Verbose debugging information",
+            "Very detailed trace information"
+          ]
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

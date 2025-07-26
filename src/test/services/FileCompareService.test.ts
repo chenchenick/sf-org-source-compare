@@ -3,13 +3,11 @@ import * as sinon from 'sinon';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { FileCompareService } from '../../services/FileCompareService';
-import { OrgManager } from '../../services/OrgManager';
 import { EnhancedOrgManager } from '../../metadata/EnhancedOrgManager';
 import { OrgFile, SalesforceOrg } from '../../types';
 
 suite('FileCompareService Test Suite', () => {
     let fileCompareService: FileCompareService;
-    let mockOrgManager: sinon.SinonStubbedInstance<OrgManager>;
     let mockEnhancedOrgManager: sinon.SinonStubbedInstance<EnhancedOrgManager>;
     let executeCommandStub: sinon.SinonStub;
     let openTextDocumentStub: sinon.SinonStub;
@@ -81,7 +79,6 @@ suite('FileCompareService Test Suite', () => {
         sinon.reset();
 
         // Create stubbed managers
-        mockOrgManager = sinon.createStubInstance(OrgManager);
         mockEnhancedOrgManager = sinon.createStubInstance(EnhancedOrgManager);
 
         // Mock status bar item
@@ -111,10 +108,9 @@ suite('FileCompareService Test Suite', () => {
         mockMkdir = sinon.stub(fs.promises, 'mkdir');
 
         // Set up default mock responses
-        mockOrgManager.getOrg.withArgs('org1-id').returns(sampleOrg1);
-        mockOrgManager.getOrg.withArgs('org2-id').returns(sampleOrg2);
-        mockOrgManager.getFileContent.resolves('file content from org manager');
-        mockEnhancedOrgManager.getFileContent.resolves('file content from enhanced manager');
+        mockEnhancedOrgManager.getOrg.withArgs('org1-id').returns(sampleOrg1);
+        mockEnhancedOrgManager.getOrg.withArgs('org2-id').returns(sampleOrg2);
+        mockEnhancedOrgManager.getFileContentById.resolves('file content from enhanced manager');
 
         // Mock file system for local files
         mockExistsSync.returns(true);
@@ -123,7 +119,7 @@ suite('FileCompareService Test Suite', () => {
         mockMkdir.resolves();
 
         // Create service instance with enhanced org manager
-        fileCompareService = new FileCompareService(mockOrgManager as any, mockEnhancedOrgManager as any);
+        fileCompareService = new FileCompareService(mockEnhancedOrgManager as any);
     });
 
     teardown(() => {
@@ -136,9 +132,9 @@ suite('FileCompareService Test Suite', () => {
             assert.ok(mockStatusBarItem.show.calledOnce);
         });
 
-        test('should handle missing enhanced org manager', () => {
-            const serviceWithoutEnhanced = new FileCompareService(mockOrgManager as any);
-            assert.ok(serviceWithoutEnhanced);
+        test('should initialize with enhanced org manager', () => {
+            const service = new FileCompareService(mockEnhancedOrgManager as any);
+            assert.ok(service);
         });
     });
 
@@ -274,7 +270,7 @@ suite('FileCompareService Test Suite', () => {
             
             // Should use local files directly
             assert.ok(executeCommandStub.calledWith('vscode.diff'));
-            assert.ok(!mockEnhancedOrgManager.getFileContent.called); // No content retrieval
+            assert.ok(!mockEnhancedOrgManager.getFileContentById.called); // No content retrieval
         });
 
         test('should fallback to content retrieval for files without paths', async () => {
@@ -292,7 +288,7 @@ suite('FileCompareService Test Suite', () => {
             await fileCompareService.compareSelectedFiles();
             
             // Should fall back to content retrieval for file without path
-            assert.ok(mockEnhancedOrgManager.getFileContent.called);
+            assert.ok(mockEnhancedOrgManager.getFileContentById.called);
             assert.ok(executeCommandStub.calledWith('vscode.diff'));
         });
 
@@ -302,7 +298,7 @@ suite('FileCompareService Test Suite', () => {
             
             // Mock file system error
             mockExistsSync.withArgs(sampleFile1.filePath).returns(false);
-            mockEnhancedOrgManager.getFileContent.rejects(new Error('Network error'));
+            mockEnhancedOrgManager.getFileContentById.rejects(new Error('Network error'));
             
             withProgressStub.callsArgWith(1, {
                 report: sinon.stub()
@@ -363,7 +359,7 @@ suite('FileCompareService Test Suite', () => {
             
             // Should use local for first file, content retrieval for second
             assert.ok(executeCommandStub.calledWith('vscode.diff'));
-            assert.ok(mockEnhancedOrgManager.getFileContent.calledOnce);
+            assert.ok(mockEnhancedOrgManager.getFileContentById.calledOnce);
         });
 
         test('should update comparison state during operation', async () => {

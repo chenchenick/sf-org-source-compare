@@ -1,5 +1,6 @@
 import { MetadataHandler } from './base/MetadataHandler';
 import { OrgFile, BundleContent, MetadataTypeDefinition, MetadataHandlerConfig, EnhancedObjectMetadata, ValidationRule, CustomField } from '../../types';
+import { SecureCommandExecutor } from '../../security/SecureCommandExecutor';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -44,8 +45,7 @@ export class CustomObjectHandler extends MetadataHandler {
      */
     public async getFiles(orgId: string, orgIdentifier: string): Promise<OrgFile[]> {
         try {
-            const command = `sf org list metadata --metadata-type CustomObject --target-org "${orgIdentifier}" --json`;
-            const result = await this.executeSfCommand(command);
+            const result = await SecureCommandExecutor.executeOrgListMetadata('CustomObject', orgIdentifier);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result) {
@@ -87,9 +87,13 @@ export class CustomObjectHandler extends MetadataHandler {
     private async getObjectXmlContent(orgIdentifier: string, file: OrgFile): Promise<string> {
         try {
             // Use sf project retrieve to get the XML metadata
-            const command = `sf project retrieve start --metadata "CustomObject:${file.fullName}" --target-org "${orgIdentifier}" --json`;
-            console.log(`CustomObject retrieve command: ${command}`);
-            const result = await this.executeSfCommand(command);
+            const args = [
+                'project', 'retrieve', 'start',
+                '--metadata', `CustomObject:${file.fullName}`,
+                '--target-org', orgIdentifier,
+                '--json'
+            ];
+            const result = await SecureCommandExecutor.executeCommand('sf', args);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result) {
@@ -130,8 +134,7 @@ export class CustomObjectHandler extends MetadataHandler {
      */
     private async getEnhancedObjectMetadata(orgIdentifier: string, file: OrgFile): Promise<EnhancedObjectMetadata> {
         try {
-            const command = `sf sobject describe --sobject ${file.fullName} --target-org "${orgIdentifier}" --json`;
-            const result = await this.executeSfCommand(command);
+            const result = await SecureCommandExecutor.executeSObjectDescribe(file.fullName, orgIdentifier);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result) {
@@ -192,9 +195,8 @@ export class CustomObjectHandler extends MetadataHandler {
     private async getValidationRules(orgIdentifier: string, objectName: string): Promise<ValidationRule[]> {
         try {
             const query = `SELECT Id, ValidationName, Active, Description, ErrorConditionFormula, ErrorMessage, ErrorDisplayField FROM ValidationRule WHERE EntityDefinition.QualifiedApiName = '${objectName}'`;
-            const command = `sf data query --query "${query}" --target-org "${orgIdentifier}" --use-tooling-api --json`;
             
-            const result = await this.executeSfCommand(command);
+            const result = await SecureCommandExecutor.executeDataQuery(query, orgIdentifier, true);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result || !parsed.result.records) {

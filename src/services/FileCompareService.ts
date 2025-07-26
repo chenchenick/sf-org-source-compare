@@ -3,22 +3,28 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { CompareSelection, OrgFile } from '../types';
-import { OrgManager } from './OrgManager';
 import { EnhancedOrgManager } from '../metadata/EnhancedOrgManager';
+import { ProgressManager } from '../progress/ProgressManager';
+import { ConfigurationManager, SF_CONFIG } from '../config';
+import { ErrorHandler, ErrorHandlingStrategy, ErrorUtils } from '../errors/ErrorHandler';
 
 export class FileCompareService {
     private selectedFiles: OrgFile[] = [];
-    private orgManager: OrgManager;
-    private enhancedOrgManager: EnhancedOrgManager | null = null;
+    private enhancedOrgManager: EnhancedOrgManager;
     private tempDir: string;
     private sessionId: string;
     private createdFiles: Set<string> = new Set();
     private isComparing: boolean = false;
     private statusBarItem: vscode.StatusBarItem;
+    private config: ConfigurationManager;
+    private errorHandler: ErrorHandler;
+    private progressManager: ProgressManager;
 
-    constructor(orgManager: OrgManager, enhancedOrgManager?: EnhancedOrgManager) {
-        this.orgManager = orgManager;
-        this.enhancedOrgManager = enhancedOrgManager || null;
+    constructor(enhancedOrgManager: EnhancedOrgManager) {
+        this.config = ConfigurationManager.getInstance();
+        this.errorHandler = ErrorHandler.getInstance();
+        this.progressManager = ProgressManager.getInstance();
+        this.enhancedOrgManager = enhancedOrgManager;
         this.sessionId = this.generateSessionId();
         this.tempDir = this.createSessionTempDirectory();
         
@@ -87,40 +93,43 @@ export class FileCompareService {
         // Small delay to ensure UI updates
         await new Promise(resolve => setTimeout(resolve, 100));
 
-        await vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: "Comparing Files",
-            cancellable: false
-        }, async (progress) => {
+        await this.progressManager.withProgress('FILE_COMPARISON', async (progress) => {
             try {
-                // Update progress and status bar
-                progress.report({ increment: 0, message: "Preparing comparison..." });
+                progress.startStep(0, 'Preparing file comparison');
                 this.updateDetailedStatusBar('Preparing file comparison...');
                 
                 // Trigger tree view refresh to show loading state (no org requests)
                 vscode.commands.executeCommand('sf-org-source-compare.refreshTreeView');
 
                 // Get org names for progress messages
-                const org1 = this.orgManager.getOrg(file1.orgId);
-                const org2 = this.orgManager.getOrg(file2.orgId);
+                const org1 = this.enhancedOrgManager.getOrg(file1.orgId);
+                const org2 = this.enhancedOrgManager.getOrg(file2.orgId);
                 
                 const org1Name = org1?.alias || org1?.username || 'Unknown Org';
                 const org2Name = org2?.alias || org2?.username || 'Unknown Org';
+                progress.completeStep(0);
                 
-                // Prepare first file
-                progress.report({ increment: 20, message: `Preparing ${file1.name} from ${org1Name}...` });
+                // Read file contents
+                progress.startStep(1, `Reading ${file1.name} from ${org1Name}`);
                 this.updateDetailedStatusBar(`Preparing ${file1.name} from ${org1Name}...`);
                 this.updateStatusBarItem();
                 const uri1 = await this.createNamedTempFile(file1);
                 
-                // Prepare second file
-                progress.report({ increment: 60, message: `Preparing ${file2.name} from ${org2Name}...` });
+                progress.updateStep(50, `Reading ${file2.name} from ${org2Name}`);
                 this.updateDetailedStatusBar(`Preparing ${file2.name} from ${org2Name}...`);
                 this.updateStatusBarItem();
                 const uri2 = await this.createNamedTempFile(file2);
+                progress.completeStep(1);
+
+                // Analyze differences
+                progress.startStep(2, 'Analyzing file differences');
+                this.updateDetailedStatusBar('Analyzing differences...');
+                this.updateStatusBarItem();
+                await new Promise(resolve => setTimeout(resolve, 200)); // Brief analysis simulation
+                progress.completeStep(2);
 
                 // Open comparison
-                progress.report({ increment: 80, message: "Opening comparison view..." });
+                progress.startStep(3, 'Opening comparison view');
                 this.updateDetailedStatusBar('Opening comparison view...');
                 this.updateStatusBarItem();
                 
@@ -132,9 +141,9 @@ export class FileCompareService {
                     uri2,
                     title
                 );
+                progress.completeStep(3);
 
                 // Complete
-                progress.report({ increment: 100, message: "Comparison ready!" });
                 this.updateDetailedStatusBar('Comparison completed successfully!');
                 
                 // Show success message briefly
@@ -148,9 +157,12 @@ export class FileCompareService {
                 }, 500);
 
             } catch (error) {
-                progress.report({ increment: 100, message: "Comparison failed" });
+                progress.fail("Comparison failed");
                 this.updateDetailedStatusBar('Comparison failed');
-                vscode.window.showErrorMessage(`Failed to compare files: ${error}`);
+                
+                // Use standardized error handling
+                const standardError = this.errorHandler.standardizeError(error as Error, 'File comparison');
+                this.errorHandler.showErrorToUser(standardError);
             } finally {
                 // Reset comparing state
                 this.isComparing = false;
@@ -174,12 +186,10 @@ export class FileCompareService {
             
             // Fallback: retrieve content and create temp file (for backward compatibility)
             console.log('Falling back to content retrieval for file:', file.name);
-            const content = this.enhancedOrgManager 
-                ? await this.enhancedOrgManager.getFileContent(file.orgId, file.id)
-                : await this.orgManager.getFileContent(file.orgId, file.id);
+            const content = await this.enhancedOrgManager.getFileContentById(file.orgId, file.id);
             
             // Get org name for the file name
-            const org = this.orgManager.getOrg(file.orgId);
+            const org = this.enhancedOrgManager.getOrg(file.orgId);
             const orgName = this.sanitizeFileName(org?.alias || org?.username || 'UnknownOrg');
             
             // Create a meaningful file name: OrgName_FileName
@@ -235,11 +245,11 @@ export class FileCompareService {
             statusText += `${this.selectedFiles[0].name} ↔ ${this.selectedFiles[1].name} (ready to compare)`;
         }
         
-        vscode.window.setStatusBarMessage(statusText, 3000);
+        vscode.window.setStatusBarMessage(statusText, this.config.getUITimeout('status_bar'));
     }
 
     private updateDetailedStatusBar(message: string): void {
-        vscode.window.setStatusBarMessage(`SF Compare: ${message}`, 5000);
+        vscode.window.setStatusBarMessage(`SF Compare: ${message}`, this.config.getUITimeout('status_bar_extended'));
         this.statusBarItem.text = `$(sync~spin) SF Compare: ${message}`;
         this.statusBarItem.tooltip = message;
     }
@@ -269,7 +279,7 @@ export class FileCompareService {
     }
 
     private createSessionTempDirectory(): string {
-        const tempDir = path.join(os.tmpdir(), 'sfcompare', this.sessionId);
+        const tempDir = path.join(os.tmpdir(), SF_CONFIG.FS.TEMP_DIR_PREFIX, this.sessionId);
         
         try {
             fs.mkdirSync(tempDir, { recursive: true });

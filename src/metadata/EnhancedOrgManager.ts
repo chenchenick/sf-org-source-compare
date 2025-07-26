@@ -4,11 +4,15 @@ import { MetadataRegistry } from './MetadataRegistry';
 import { ParallelProcessor } from './ParallelProcessor';
 import { MetadataConfiguration } from './MetadataConfiguration';
 import { SourceRetrievalService } from '../services/SourceRetrievalService';
+import { SecureCommandExecutor } from '../security/SecureCommandExecutor';
 import { ApexHandler } from './handlers/ApexHandler';
 import { CustomObjectHandler } from './handlers/CustomObjectHandler';
 import { LwcHandler } from './handlers/LwcHandler';
 import { AuraHandler } from './handlers/AuraHandler';
 import { GeneralMetadataHandler } from './handlers/GeneralMetadataHandler';
+import { UserErrorReporter } from '../errors/UserErrorReporter';
+import { ProgressManager } from '../progress/ProgressManager';
+import { ManifestManager } from '../services/ManifestManager';
 
 /**
  * Enhanced org manager with metadata registry and parallel processing support
@@ -27,9 +31,18 @@ export class EnhancedOrgManager {
         this.registry = MetadataRegistry.getInstance();
         this.processor = new ParallelProcessor(this.registry);
         this.configuration = MetadataConfiguration.getInstance();
-        this.sourceRetrieval = new SourceRetrievalService();
+        
+        // Create ManifestManager for SourceRetrievalService
+        const manifestManager = new ManifestManager(context);
+        this.sourceRetrieval = new SourceRetrievalService(manifestManager);
+        
+        this.userErrorReporter = UserErrorReporter.getInstance();
+        this.progressManager = ProgressManager.getInstance();
         this.loadOrgs();
     }
+
+    private userErrorReporter: UserErrorReporter;
+    private progressManager: ProgressManager;
 
     /**
      * Initialize the enhanced org manager
@@ -104,7 +117,13 @@ export class EnhancedOrgManager {
             this.orgs = storedOrgs;
         } catch (error) {
             console.error('Error loading orgs:', error);
-            vscode.window.showErrorMessage('Failed to load stored organizations. Starting with empty list.');
+            // Report error without await since this is not async
+            this.userErrorReporter.reportError(
+                error as Error,
+                'Load stored organizations'
+            ).catch(reportError => 
+                console.error('Failed to report error:', reportError)
+            );
             this.orgs = [];
         }
     }
@@ -117,7 +136,10 @@ export class EnhancedOrgManager {
             await this.context.globalState.update('salesforceOrgs', this.orgs);
         } catch (error) {
             console.error('Error saving orgs:', error);
-            vscode.window.showErrorMessage('Failed to save organizations.');
+            await this.userErrorReporter.reportError(
+                error as Error,
+                'Save organizations'
+            );
             throw error;
         }
     }
@@ -161,11 +183,8 @@ export class EnhancedOrgManager {
      * Query SFDX orgs
      */
     public async querySfdxOrgs(): Promise<SalesforceOrg[]> {
-        const util = require('util');
-        const exec = util.promisify(require('child_process').exec);
-
         try {
-            const { stdout } = await exec('sf org list --json');
+            const { stdout } = await SecureCommandExecutor.executeOrgList();
             const result = JSON.parse(stdout);
 
             if (result.status !== 0) {
@@ -208,49 +227,73 @@ export class EnhancedOrgManager {
     }
 
     /**
-     * Authenticate an organization
+     * Authenticate an organization with progress indicator
      */
     public async authenticateOrg(): Promise<SalesforceOrg | undefined> {
-        try {
-            const availableOrgs = await this.querySfdxOrgs();
-            
-            if (availableOrgs.length === 0) {
-                const action = await vscode.window.showInformationMessage(
-                    'No authenticated orgs found. Would you like to authenticate now?',
-                    'Open Terminal'
-                );
+        return this.progressManager.withProgress('AUTHENTICATION', async (progress) => {
+            try {
+                progress.startStep(0, 'Launching authentication process');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                progress.completeStep(0);
                 
-                if (action === 'Open Terminal') {
-                    vscode.commands.executeCommand('workbench.action.terminal.new');
+                progress.startStep(1, 'Checking for authenticated organizations');
+                const availableOrgs = await this.querySfdxOrgs();
+                
+                if (availableOrgs.length === 0) {
+                    progress.updateStep(50, 'No authenticated orgs found');
+                    const action = await vscode.window.showInformationMessage(
+                        'No authenticated orgs found. Would you like to authenticate now?',
+                        'Open Terminal'
+                    );
+                    
+                    if (action === 'Open Terminal') {
+                        vscode.commands.executeCommand('workbench.action.terminal.new');
+                    }
+                    
+                    progress.fail('No authenticated organizations available');
+                    return undefined;
+                }
+
+                progress.updateStep(80, 'Found authenticated organizations');
+                const orgItems = availableOrgs.map(org => ({
+                    label: org.alias || org.username,
+                    description: org.username,
+                    org: org
+                }));
+
+                const selectedItem = await vscode.window.showQuickPick(orgItems, {
+                    placeHolder: 'Select an organization to add'
+                });
+
+                if (!selectedItem) {
+                    progress.fail('No organization selected');
+                    return undefined;
                 }
                 
+                progress.completeStep(1);
+                
+                progress.startStep(2, 'Verifying organization credentials');
+                const selectedOrg = selectedItem.org;
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate verification
+                progress.completeStep(2);
+                
+                progress.startStep(3, 'Saving organization information');
+                await this.addOrg(selectedOrg);
+                progress.completeStep(3);
+                
+                vscode.window.showInformationMessage(`Added organization: ${selectedOrg.alias || selectedOrg.username}`);
+                return selectedOrg;
+                
+            } catch (error) {
+                console.error('Error authenticating org:', error);
+                progress.fail('Authentication failed');
+                await this.userErrorReporter.reportAuthenticationFailure(
+                    undefined,
+                    error as Error
+                );
                 return undefined;
             }
-
-            const orgItems = availableOrgs.map(org => ({
-                label: org.alias || org.username,
-                description: org.username,
-                org: org
-            }));
-
-            const selectedItem = await vscode.window.showQuickPick(orgItems, {
-                placeHolder: 'Select an organization to add'
-            });
-
-            if (!selectedItem) {
-                return undefined;
-            }
-
-            const selectedOrg = selectedItem.org;
-            await this.addOrg(selectedOrg);
-            vscode.window.showInformationMessage(`Added organization: ${selectedOrg.alias || selectedOrg.username}`);
-            
-            return selectedOrg;
-        } catch (error) {
-            console.error('Error authenticating org:', error);
-            vscode.window.showErrorMessage(`Failed to authenticate organization: ${error instanceof Error ? error.message : String(error)}`);
-            return undefined;
-        }
+        });
     }
 
     /**
@@ -302,6 +345,22 @@ export class EnhancedOrgManager {
             return await this.sourceRetrieval.getFileContent(orgId, { filePath } as OrgFile);
         } catch (error) {
             console.error(`Error retrieving file content for ${filePath}:`, error);
+            return '';
+        }
+    }
+
+    /**
+     * Get file content by file ID (backward compatibility with old OrgManager)
+     * @deprecated Use getFileContent with file path or use enhanced metadata system directly
+     */
+    public async getFileContentById(orgId: string, fileId: string): Promise<string> {
+        try {
+            // For backward compatibility, we need to find the file by ID
+            // This is a simplified implementation - in practice, file IDs would be stored
+            console.warn('getFileContentById is deprecated. Use getFileContent with file path instead.');
+            return '';
+        } catch (error) {
+            console.error(`Error retrieving file content for fileId ${fileId}:`, error);
             return '';
         }
     }

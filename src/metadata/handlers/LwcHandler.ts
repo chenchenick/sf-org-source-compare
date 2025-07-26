@@ -1,5 +1,8 @@
 import { MetadataHandler } from './base/MetadataHandler';
 import { OrgFile, BundleContent, MetadataTypeDefinition, MetadataHandlerConfig, LWCBundle } from '../../types';
+import { ConfigurationManager } from '../../config';
+import { SecureCommandExecutor } from '../../security/SecureCommandExecutor';
+import { ErrorHandler, ErrorHandlingStrategy, ErrorUtils } from '../../errors/ErrorHandler';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -9,6 +12,7 @@ import * as path from 'path';
  */
 export class LwcHandler extends MetadataHandler {
     private readonly bundleExtensions = ['.js', '.html', '.css', '.xml', '.svg', '.js-meta.xml'];
+    private errorHandler: ErrorHandler;
 
     constructor(config: MetadataHandlerConfig) {
         const definition: MetadataTypeDefinition = {
@@ -21,6 +25,7 @@ export class LwcHandler extends MetadataHandler {
         };
         
         super(definition, config);
+        this.errorHandler = ErrorHandler.getInstance();
     }
 
     /**
@@ -28,8 +33,7 @@ export class LwcHandler extends MetadataHandler {
      */
     public async getFiles(orgId: string, orgIdentifier: string): Promise<OrgFile[]> {
         try {
-            const command = `sf org list metadata --metadata-type LightningComponentBundle --target-org "${orgIdentifier}" --json`;
-            const result = await this.executeSfCommand(command);
+            const result = await SecureCommandExecutor.executeOrgListMetadata('LightningComponentBundle', orgIdentifier);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result) {
@@ -47,7 +51,13 @@ export class LwcHandler extends MetadataHandler {
             })).sort((a: any, b: any) => a.name.localeCompare(b.name));
         } catch (error) {
             console.error('Error retrieving LWC files:', error);
-            throw new Error(`Failed to retrieve LWC files: ${error instanceof Error ? error.message : String(error)}`);
+            
+            const standardError = ErrorUtils.createMetadataError(
+                `Failed to retrieve LWC files: ${error instanceof Error ? error.message : String(error)}`,
+                { metadataType: 'LightningComponentBundle', orgIdentifier }
+            );
+            
+            return this.errorHandler.handleError(standardError, ErrorHandlingStrategy.RETURN_EMPTY);
         }
     }
 
@@ -70,17 +80,21 @@ export class LwcHandler extends MetadataHandler {
         } catch (error) {
             console.error(`Error retrieving LWC bundle for ${file.name}:`, error);
             
-            // Return default bundle content instead of error
-            const defaultFiles = new Map<string, string>();
-            defaultFiles.set(`${file.fullName}.js`, this.generateDefaultJsContent(file.fullName));
-            defaultFiles.set(`${file.fullName}.html`, this.generateDefaultHtmlContent(file.fullName));
-            defaultFiles.set(`${file.fullName}.js-meta.xml`, this.generateDefaultMetaXmlContent(file.fullName));
+            // Use standardized error handling - return empty bundle for content retrieval failures
+            const standardError = ErrorUtils.createMetadataError(
+                `Failed to retrieve LWC bundle for ${file.name}: ${error instanceof Error ? error.message : String(error)}`,
+                { fileId: file.id, fileName: file.name, metadataType: 'LightningComponentBundle' }
+            );
             
-            return {
-                files: defaultFiles,
-                mainFile: `${file.fullName}.js`,
-                bundleType: 'lwc'
-            };
+            // Return empty bundle as default
+            const emptyFiles = new Map<string, string>();
+            return this.errorHandler.handleError(standardError, ErrorHandlingStrategy.RETURN_DEFAULT, {
+                defaultValue: {
+                    files: emptyFiles,
+                    mainFile: `${file.fullName}.js`,
+                    bundleType: 'lwc'
+                }
+            });
         }
     }
 
@@ -92,9 +106,13 @@ export class LwcHandler extends MetadataHandler {
         
         try {
             // Use sf project retrieve to get the LWC bundle
-            const command = `sf project retrieve start --metadata "LightningComponentBundle:${file.fullName}" --target-org "${orgIdentifier}" --json`;
-            console.log(`LWC retrieve command: ${command}`);
-            const result = await this.executeSfCommand(command);
+            const args = [
+                'project', 'retrieve', 'start',
+                '--metadata', `LightningComponentBundle:${file.fullName}`,
+                '--target-org', orgIdentifier,
+                '--json'
+            ];
+            const result = await SecureCommandExecutor.executeCommand('sf', args);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result) {
@@ -197,7 +215,7 @@ export default class ${this.toPascalCase(componentName)} extends LightningElemen
     private generateDefaultMetaXmlContent(componentName: string): string {
         return `<?xml version="1.0" encoding="UTF-8"?>
 <LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
-    <apiVersion>58.0</apiVersion>
+    <apiVersion>${this.configManager.getApiVersion()}</apiVersion>
     <isExposed>false</isExposed>
 </LightningComponentBundle>`;
     }
@@ -246,7 +264,7 @@ export default class ${this.toPascalCase(componentName)} extends LightningElemen
                     
                     // Parse meta XML for API version and exposure
                     const metaXmlFile = componentFiles.find(f => f.endsWith('.js-meta.xml'));
-                    let apiVersion = '58.0';
+                    let apiVersion = this.configManager.getApiVersion();
                     let exposed = false;
                     
                     if (metaXmlFile) {

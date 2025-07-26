@@ -1,5 +1,8 @@
 import { MetadataHandler } from './base/MetadataHandler';
 import { OrgFile, BundleContent, MetadataTypeDefinition, MetadataHandlerConfig } from '../../types';
+import { ConfigurationManager } from '../../config';
+import { SecureCommandExecutor } from '../../security/SecureCommandExecutor';
+import { ErrorHandler, ErrorHandlingStrategy, ErrorUtils } from '../../errors/ErrorHandler';
 
 /**
  * Handler for Apex classes and triggers
@@ -7,6 +10,7 @@ import { OrgFile, BundleContent, MetadataTypeDefinition, MetadataHandlerConfig }
  */
 export class ApexHandler extends MetadataHandler {
     private requestedType: string;
+    private errorHandler: ErrorHandler;
 
     constructor(config: MetadataHandlerConfig, metadataType: string = 'ApexClass') {
         // This handler supports both ApexClass and ApexTrigger
@@ -21,6 +25,7 @@ export class ApexHandler extends MetadataHandler {
         
         super(definition, config);
         this.requestedType = metadataType;
+        this.errorHandler = ErrorHandler.getInstance();
     }
 
     /**
@@ -38,7 +43,13 @@ export class ApexHandler extends MetadataHandler {
             }
         } catch (error) {
             console.error(`Error retrieving ${this.requestedType} files:`, error);
-            throw new Error(`Failed to retrieve ${this.requestedType} files: ${error instanceof Error ? error.message : String(error)}`);
+            
+            const standardError = ErrorUtils.createMetadataError(
+                `Failed to retrieve ${this.requestedType} files: ${error instanceof Error ? error.message : String(error)}`,
+                { metadataType: this.requestedType, orgIdentifier }
+            );
+            
+            return this.errorHandler.handleError(standardError, ErrorHandlingStrategy.RETURN_EMPTY);
         }
     }
 
@@ -46,8 +57,7 @@ export class ApexHandler extends MetadataHandler {
      * Get Apex Classes from the org
      */
     private async getApexClasses(orgId: string, orgIdentifier: string): Promise<OrgFile[]> {
-        const command = `sf org list metadata --metadata-type ApexClass --target-org "${orgIdentifier}" --json`;
-        const result = await this.executeSfCommand(command);
+        const result = await SecureCommandExecutor.executeOrgListMetadata('ApexClass', orgIdentifier);
         const parsed = this.parseJsonResponse(result.stdout);
 
         if (!parsed.result) {
@@ -86,8 +96,7 @@ export class ApexHandler extends MetadataHandler {
      * Get Apex Triggers from the org
      */
     private async getApexTriggers(orgId: string, orgIdentifier: string): Promise<OrgFile[]> {
-        const command = `sf org list metadata --metadata-type ApexTrigger --target-org "${orgIdentifier}" --json`;
-        const result = await this.executeSfCommand(command);
+        const result = await SecureCommandExecutor.executeOrgListMetadata('ApexTrigger', orgIdentifier);
         const parsed = this.parseJsonResponse(result.stdout);
 
         if (!parsed.result) {
@@ -142,7 +151,14 @@ export class ApexHandler extends MetadataHandler {
             }
         } catch (error) {
             console.error(`Error retrieving content for ${file.name}:`, error);
-            return this.generateErrorContent(file, error);
+            
+            // Use standardized error handling - return empty for content retrieval failures
+            const standardError = ErrorUtils.createMetadataError(
+                `Failed to retrieve content for ${file.name}: ${error instanceof Error ? error.message : String(error)}`,
+                { fileId: file.id, fileName: file.name, metadataType: file.type, orgIdentifier }
+            );
+            
+            return this.errorHandler.handleError(standardError, ErrorHandlingStrategy.RETURN_EMPTY, { defaultValue: '' });
         }
     }
 
@@ -151,10 +167,9 @@ export class ApexHandler extends MetadataHandler {
      */
     private async getApexClassContent(orgIdentifier: string, file: OrgFile): Promise<string> {
         const query = `SELECT Id, Name, Body, ApiVersion, Status, IsValid FROM ApexClass WHERE Name = '${file.fullName}'`;
-        const command = `sf data query --query "${query}" --target-org "${orgIdentifier}" --use-tooling-api --json`;
         
         console.log(`ApexClass query: ${query}`);
-        const result = await this.executeSfCommand(command);
+        const result = await SecureCommandExecutor.executeDataQuery(query, orgIdentifier, true);
         const parsed = this.parseJsonResponse(result.stdout);
 
         if (!parsed.result || !parsed.result.records || parsed.result.records.length === 0) {
@@ -179,8 +194,13 @@ export class ApexHandler extends MetadataHandler {
         try {
             // Use sf project retrieve to get the meta.xml file
             const metadataType = file.type; // ApexClass or ApexTrigger
-            const command = `sf project retrieve start --metadata "${metadataType}:${file.fullName}" --target-org "${orgIdentifier}" --json`;
-            const result = await this.executeSfCommand(command);
+            const args = [
+                'project', 'retrieve', 'start',
+                '--metadata', `${metadataType}:${file.fullName}`,
+                '--target-org', orgIdentifier,
+                '--json'
+            ];
+            const result = await SecureCommandExecutor.executeCommand('sf', args);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result) {
@@ -229,7 +249,7 @@ export class ApexHandler extends MetadataHandler {
      * Generate basic meta.xml content if file cannot be retrieved
      */
     private generateBasicMetaXml(file: OrgFile): string {
-        const apiVersion = '58.0'; // Default API version
+        const apiVersion = this.configManager.getApiVersion();
         return `<?xml version="1.0" encoding="UTF-8"?>
 <${file.type} xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>${apiVersion}</apiVersion>
@@ -242,10 +262,9 @@ export class ApexHandler extends MetadataHandler {
      */
     private async getApexTriggerContent(orgIdentifier: string, file: OrgFile): Promise<string> {
         const query = `SELECT Id, Name, Body, ApiVersion, Status, IsValid, TableEnumOrId, UsageBeforeInsert, UsageAfterInsert, UsageBeforeUpdate, UsageAfterUpdate, UsageBeforeDelete, UsageAfterDelete, UsageAfterUndelete FROM ApexTrigger WHERE Name = '${file.fullName}'`;
-        const command = `sf data query --query "${query}" --target-org "${orgIdentifier}" --use-tooling-api --json`;
         
         console.log(`ApexTrigger query: ${query}`);
-        const result = await this.executeSfCommand(command);
+        const result = await SecureCommandExecutor.executeDataQuery(query, orgIdentifier, true);
         const parsed = this.parseJsonResponse(result.stdout);
 
         if (!parsed.result || !parsed.result.records || parsed.result.records.length === 0) {
@@ -375,10 +394,9 @@ export class ApexHandler extends MetadataHandler {
         const classNames = classes.map(c => `'${c.fullName}'`).join(', ');
         if (classNames) {
             const metricsQuery = `SELECT Name, LengthWithoutComments, NumLinesCovered, NumLinesUncovered FROM ApexClass WHERE Name IN (${classNames})`;
-            const metricsCommand = `sf data query --query "${metricsQuery}" --target-org "${orgIdentifier}" --use-tooling-api --json`;
             
             try {
-                const metricsResult = await this.executeSfCommand(metricsCommand);
+                const metricsResult = await SecureCommandExecutor.executeDataQuery(metricsQuery, orgIdentifier, true);
                 const metricsParsed = this.parseJsonResponse(metricsResult.stdout);
                 
                 if (metricsParsed.result && metricsParsed.result.records) {
@@ -417,10 +435,9 @@ export class ApexHandler extends MetadataHandler {
         const triggerNames = triggers.map(t => `'${t.fullName}'`).join(', ');
         if (triggerNames) {
             const triggerQuery = `SELECT Name, TableEnumOrId, UsageBeforeInsert, UsageAfterInsert, UsageBeforeUpdate, UsageAfterUpdate, UsageBeforeDelete, UsageAfterDelete, UsageAfterUndelete FROM ApexTrigger WHERE Name IN (${triggerNames})`;
-            const triggerCommand = `sf data query --query "${triggerQuery}" --target-org "${orgIdentifier}" --use-tooling-api --json`;
             
             try {
-                const triggerResult = await this.executeSfCommand(triggerCommand);
+                const triggerResult = await SecureCommandExecutor.executeDataQuery(triggerQuery, orgIdentifier, true);
                 const triggerParsed = this.parseJsonResponse(triggerResult.stdout);
                 
                 if (triggerParsed.result && triggerParsed.result.records) {

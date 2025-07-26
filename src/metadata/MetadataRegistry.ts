@@ -1,5 +1,6 @@
 import { MetadataTypeDefinition, MetadataHandlerConfig, OrgFile, BundleContent, ProcessingResult } from '../types';
 import { MetadataHandler } from './handlers/base/MetadataHandler';
+import { ConfigurationManager } from '../config';
 
 /**
  * Registry for all metadata types and their handlers
@@ -8,9 +9,11 @@ import { MetadataHandler } from './handlers/base/MetadataHandler';
 export class MetadataRegistry {
     private handlers: Map<string, MetadataHandler> = new Map();
     private definitions: Map<string, MetadataTypeDefinition> = new Map();
+    private config: ConfigurationManager;
     private static instance: MetadataRegistry;
 
     private constructor() {
+        this.config = ConfigurationManager.getInstance();
         this.initializeDefaultDefinitions();
     }
 
@@ -379,7 +382,7 @@ export class MetadataRegistry {
             parallel: true,
             maxConcurrency: 5,
             retryCount: 3,
-            timeout: 30000
+            timeout: this.config.getTimeout('default')
         };
     }
 

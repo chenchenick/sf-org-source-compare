@@ -2,9 +2,10 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SalesforceOrg, OrgFile, TreeItem, ItemType } from '../types';
-import { OrgManager } from '../services/OrgManager';
 import { EnhancedOrgManager } from '../metadata/EnhancedOrgManager';
 import { FileCompareService } from '../services/FileCompareService';
+import { UserErrorReporter } from '../errors/UserErrorReporter';
+import { ProgressManager } from '../progress/ProgressManager';
 
 export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
@@ -16,10 +17,15 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
     private orgRefreshTimestamps: Map<string, Date> = new Map();
 
     constructor(
-        private orgManager: OrgManager,
         private enhancedOrgManager: EnhancedOrgManager,
         private fileCompareService: FileCompareService
-    ) {}
+    ) {
+        this.userErrorReporter = UserErrorReporter.getInstance();
+        this.progressManager = ProgressManager.getInstance();
+    }
+
+    private userErrorReporter: UserErrorReporter;
+    private progressManager: ProgressManager;
 
     public async refresh(): Promise<void> {
         console.log('🔄 Refresh button clicked - starting refresh...');
@@ -30,7 +36,7 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
         // Don't clear expanded folders - keep folder expansion state
         
         // Get orgs and find expanded ones
-        const orgs = this.orgManager.getOrgs();
+        const orgs = this.enhancedOrgManager.getOrgs();
         const expandedOrgs = orgs.filter(org => this.expandedOrgs.includes(org.id));
         
         console.log(`Found ${orgs.length} total orgs, ${expandedOrgs.length} expanded orgs to refresh`);
@@ -41,19 +47,42 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
             return;
         }
         
-        // Show progress for each org
-        for (const org of expandedOrgs) {
-            try {
-                console.log('🔄 Refreshing org:', org.alias || org.username);
-                vscode.window.showInformationMessage(`Refreshing ${org.alias || org.username}...`);
-                
-                const orgFiles = await this.getOrgFiles(org.id);
-                console.log(`✅ Refreshed ${org.alias || org.username}: ${orgFiles.length} file types`);
-                vscode.window.showInformationMessage(`Refreshed ${org.alias || org.username}: ${orgFiles.length} file types`);
-            } catch (error) {
-                console.error(`❌ Error refreshing org ${org.alias || org.username}:`, error);
-                vscode.window.showErrorMessage(`Failed to refresh ${org.alias || org.username}: ${error}`);
-            }
+        // Use progress manager for multi-org refresh
+        if (expandedOrgs.length > 1) {
+            await this.progressManager.withProgress('MULTI_ORG_REFRESH', async (progress) => {
+                progress.startStep(0); // prepare
+                await new Promise(resolve => setTimeout(resolve, 100)); // Brief delay for UI
+                progress.completeStep(0);
+
+                progress.startStep(1); // refresh_orgs
+                for (let i = 0; i < expandedOrgs.length; i++) {
+                    const org = expandedOrgs[i];
+                    const orgProgress = (i / expandedOrgs.length) * 100;
+                    
+                    progress.updateStep(orgProgress, `Refreshing ${org.alias || org.username}`);
+                    
+                    try {
+                        console.log('🔄 Refreshing org:', org.alias || org.username);
+                        await this.getOrgFiles(org.id, true); // Force refresh from Salesforce
+                        console.log(`✅ Refreshed ${org.alias || org.username}`);
+                    } catch (error) {
+                        console.error(`❌ Error refreshing org ${org.alias || org.username}:`, error);
+                        await this.userErrorReporter.reportOperationFailure(
+                            `Refresh organization ${org.alias || org.username}`,
+                            error as Error,
+                            { orgId: org.id, orgAlias: org.alias }
+                        );
+                    }
+                }
+                progress.completeStep(1);
+
+                progress.startStep(2); // finalize
+                progress.completeStep(2);
+            });
+        } else {
+            // Single org refresh with progress
+            const org = expandedOrgs[0];
+            await this.refreshOrgWithProgress(org.id);
         }
         
         console.log('🔄 Refresh complete - updating tree view');
@@ -72,37 +101,70 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
      * Refresh a specific org's source files
      */
     public async refreshOrg(orgId: string): Promise<void> {
-        console.log(`🔄 Refreshing specific org: ${orgId}`);
+        return this.refreshOrgWithProgress(orgId);
+    }
+
+    /**
+     * Refresh a specific org's source files with progress indicator
+     */
+    public async refreshOrgWithProgress(orgId: string): Promise<void> {
+        console.log(`🔄 Refreshing specific org with progress: ${orgId}`);
         
-        const org = this.orgManager.getOrg(orgId);
+        const org = this.enhancedOrgManager.getOrg(orgId);
         if (!org) {
-            vscode.window.showErrorMessage('Organization not found');
+            await this.userErrorReporter.reportError(
+                new Error(`Organization with ID "${orgId}" not found`),
+                'Find organization'
+            );
             return;
         }
 
-        try {
-            vscode.window.showInformationMessage(`Refreshing ${org.alias || org.username}...`);
-            
-            // Clear cache for this org
-            this.orgFilesCache.delete(orgId);
-            this.orgRefreshTimestamps.delete(orgId);
-            
-            // Use enhanced org manager's refresh method
-            await this.enhancedOrgManager.refreshOrgSource(orgId);
-            
-            // Reload org files
-            if (this.expandedOrgs.includes(orgId)) {
-                const orgFiles = await this.getOrgFiles(orgId);
-                console.log(`✅ Refreshed ${org.alias || org.username}: ${orgFiles.length} file types`);
-                vscode.window.showInformationMessage(`Refreshed ${org.alias || org.username}: ${orgFiles.length} file types`);
+        await this.progressManager.withProgress('ORG_REFRESH', async (progress) => {
+            try {
+                progress.startStep(0, `Verifying ${org.alias || org.username}`);
+                await new Promise(resolve => setTimeout(resolve, 500)); // Brief authentication check
+                progress.completeStep(0);
+                
+                progress.startStep(1, `Retrieving metadata from ${org.alias || org.username}`);
+                
+                // Clear cache for this org
+                this.orgFilesCache.delete(orgId);
+                this.orgRefreshTimestamps.delete(orgId);
+                
+                // Use enhanced org manager's refresh method
+                await this.enhancedOrgManager.refreshOrgSource(orgId);
+                progress.updateStep(60, 'Source retrieval complete');
+                
+                // Reload org files if expanded
+                if (this.expandedOrgs.includes(orgId)) {
+                    const orgFiles = await this.getOrgFiles(orgId, true); // Force refresh from Salesforce
+                    console.log(`✅ Refreshed from Salesforce ${org.alias || org.username}: ${orgFiles.length} file types`);
+                    vscode.window.showInformationMessage(`Successfully refreshed ${org.alias || org.username} from Salesforce: ${orgFiles.length} file types`);
+                }
+                
+                progress.completeStep(1);
+                
+                progress.startStep(2, 'Processing metadata files');
+                await new Promise(resolve => setTimeout(resolve, 200)); // Brief processing delay
+                progress.completeStep(2);
+                
+                progress.startStep(3, 'Updating cache');
+                await new Promise(resolve => setTimeout(resolve, 100)); // Brief cache update
+                progress.completeStep(3);
+                
+            } catch (error) {
+                console.error(`❌ Error refreshing org ${org.alias || org.username}:`, error);
+                progress.fail(`Failed to refresh ${org.alias || org.username}`);
+                await this.userErrorReporter.reportOperationFailure(
+                    `Refresh organization ${org.alias || org.username}`,
+                    error as Error,
+                    { orgId: org.id, orgAlias: org.alias }
+                );
             }
-            
-            // Update tree view
-            this._onDidChangeTreeData.fire();
-        } catch (error) {
-            console.error(`❌ Error refreshing org ${org.alias || org.username}:`, error);
-            vscode.window.showErrorMessage(`Failed to refresh ${org.alias || org.username}: ${error}`);
-        }
+        });
+        
+        // Update tree view
+        this._onDidChangeTreeData.fire();
     }
 
     public async deleteOrg(orgItem: TreeItem): Promise<void> {
@@ -110,7 +172,7 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
             return;
         }
 
-        const org = this.orgManager.getOrg(orgItem.orgId);
+        const org = this.enhancedOrgManager.getOrg(orgItem.orgId);
         if (!org) {
             return;
         }
@@ -122,7 +184,7 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
         );
 
         if (confirmation === 'Delete') {
-            await this.orgManager.removeOrg(orgItem.orgId);
+            await this.enhancedOrgManager.removeOrg(orgItem.orgId);
             
             // Remove from expanded orgs and clear cache
             this.expandedOrgs = this.expandedOrgs.filter(id => id !== orgItem.orgId);
@@ -137,7 +199,7 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     public async selectOrg(orgItem: TreeItem): Promise<void> {
-        const orgs = this.orgManager.getOrgs();
+        const orgs = this.enhancedOrgManager.getOrgs();
         const org = orgs.find(o => o.id === orgItem.id);
         
         if (!org) {
@@ -149,18 +211,28 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
         if (!this.expandedOrgs.includes(org.id)) {
             this.expandedOrgs.push(org.id);
             console.log('Expanding org:', org.alias || org.username);
-            vscode.window.showInformationMessage(`Loading files from: ${org.alias || org.username}...`);
             
             try {
-                // Load and cache the org files when expanding
-                const orgFiles = await this.getOrgFiles(org.id);
+                // Load cached org files when expanding (don't force refresh)
+                const orgFiles = await this.getOrgFiles(org.id, false); // Show cached or placeholder
                 console.log('Loaded org files:', orgFiles.length);
                 
-                vscode.window.showInformationMessage(`Loaded ${orgFiles.length} file types from: ${org.alias || org.username}`);
+                if (this.orgFilesCache.has(org.id)) {
+                    const lastRefresh = this.orgRefreshTimestamps.get(org.id);
+                    const timeString = lastRefresh ? this.formatRefreshTime(lastRefresh) : 'never';
+                    vscode.window.showInformationMessage(`Showing cached files from ${org.alias || org.username} (last refreshed: ${timeString})`);
+                } else {
+                    vscode.window.showInformationMessage(`${org.alias || org.username} expanded - click refresh to load files from org`);
+                }
+                
                 this._onDidChangeTreeData.fire();
             } catch (error) {
                 console.error('Error loading org files:', error);
-                vscode.window.showErrorMessage(`Failed to load files from ${org.alias || org.username}: ${error}`);
+                await this.userErrorReporter.reportOperationFailure(
+                    `Load files from ${org.alias || org.username}`,
+                    error as Error,
+                    { orgId: org.id, orgAlias: org.alias }
+                );
                 // Remove from expanded list if loading failed
                 this.expandedOrgs = this.expandedOrgs.filter(id => id !== org.id);
             }
@@ -287,15 +359,26 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
                 if (!this.expandedOrgs.includes(element.orgId)) {
                     this.expandedOrgs.push(element.orgId);
                 }
-                vscode.window.showInformationMessage(`Loading files from: ${element.label}...`);
                 
                 try {
-                    const orgFiles = await this.getOrgFiles(element.orgId);
-                    vscode.window.showInformationMessage(`Loaded ${orgFiles.length} file types from: ${element.label}`);
+                    const orgFiles = await this.getOrgFiles(element.orgId, false); // Show cached or placeholder
+                    
+                    if (this.orgFilesCache.has(element.orgId)) {
+                        const lastRefresh = this.orgRefreshTimestamps.get(element.orgId);
+                        const timeString = lastRefresh ? this.formatRefreshTime(lastRefresh) : 'never';
+                        console.log(`Showing cached files from ${element.label} (last refreshed: ${timeString})`);
+                    } else {
+                        console.log(`${element.label} expanded - showing placeholder, click refresh to load files`);
+                    }
+                    
                     return orgFiles;
                 } catch (error) {
                     console.error('Error auto-expanding org:', error);
-                    vscode.window.showErrorMessage(`Failed to load files from ${element.label}: ${error}`);
+                    await this.userErrorReporter.reportOperationFailure(
+                        `Auto-expand organization ${element.label}`,
+                        error as Error,
+                        { orgId: element.orgId }
+                    );
                     this.expandedOrgs = this.expandedOrgs.filter(id => id !== element.orgId);
                     return [];
                 }
@@ -316,7 +399,7 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private async getRootItems(): Promise<TreeItem[]> {
         const items: TreeItem[] = [];
-        const orgs = this.orgManager.getOrgs();
+        const orgs = this.enhancedOrgManager.getOrgs();
 
         // Show comparison progress indicator if comparing
         if (this.fileCompareService.isComparingFiles()) {
@@ -357,14 +440,25 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
         return items;
     }
 
-    private async getOrgFiles(orgId: string): Promise<TreeItem[]> {
+    private async getOrgFiles(orgId: string, forceRefresh: boolean = false): Promise<TreeItem[]> {
         // Check if files are already cached - if so, return immediately without org calls
-        if (this.orgFilesCache.has(orgId)) {
+        if (this.orgFilesCache.has(orgId) && !forceRefresh) {
             console.log('📁 CACHE HIT: Returning cached files for org:', orgId);
             return this.orgFilesCache.get(orgId) || [];
         }
 
-        console.log('🔍 CACHE MISS: Loading files from org:', orgId);
+        // If no cache and not forcing refresh, return placeholder message
+        if (!forceRefresh) {
+            console.log('📁 NO CACHE: Showing placeholder for org:', orgId);
+            return [{
+                id: `${orgId}-no-cache`,
+                label: 'No files cached - Click refresh to load from org',
+                type: ItemType.Folder,
+                children: []
+            }];
+        }
+
+        console.log('🔍 FORCE REFRESH: Loading files from org:', orgId);
         try {
             // Get the source directory path
             const sourceDirectory = await this.enhancedOrgManager.getOrgSourceDirectory(orgId);
@@ -382,7 +476,11 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
             return folderItems;
         } catch (error) {
             console.error('Error in getOrgFiles:', error);
-            vscode.window.showErrorMessage(`Failed to load files for org: ${error}`);
+            await this.userErrorReporter.reportOperationFailure(
+                'Load organization files',
+                error as Error,
+                { orgId }
+            );
             return [];
         }
     }

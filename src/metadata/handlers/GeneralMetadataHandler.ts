@@ -1,5 +1,6 @@
 import { MetadataHandler } from './base/MetadataHandler';
 import { OrgFile, BundleContent, MetadataTypeDefinition, MetadataHandlerConfig } from '../../types';
+import { SecureCommandExecutor } from '../../security/SecureCommandExecutor';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -151,8 +152,7 @@ export class GeneralMetadataHandler extends MetadataHandler {
     public async getFiles(orgId: string, orgIdentifier: string): Promise<OrgFile[]> {
         try {
             const metadataType = this.definition.sfCliMetadataType || this.definition.name;
-            const command = `sf org list metadata --metadata-type ${metadataType} --target-org "${orgIdentifier}" --json`;
-            const result = await this.executeSfCommand(command);
+            const result = await SecureCommandExecutor.executeOrgListMetadata(metadataType, orgIdentifier);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result) {
@@ -194,9 +194,13 @@ export class GeneralMetadataHandler extends MetadataHandler {
     private async getMetadataXmlContent(orgIdentifier: string, file: OrgFile): Promise<string> {
         try {
             const metadataType = this.definition.sfCliMetadataType || this.definition.name;
-            const command = `sf project retrieve start --metadata "${metadataType}:${file.fullName}" --target-org "${orgIdentifier}" --json`;
-            console.log(`${this.definition.name} retrieve command: ${command}`);
-            const result = await this.executeSfCommand(command);
+            const args = [
+                'project', 'retrieve', 'start',
+                '--metadata', `${metadataType}:${file.fullName}`,
+                '--target-org', orgIdentifier,
+                '--json'
+            ];
+            const result = await SecureCommandExecutor.executeCommand('sf', args);
             const parsed = this.parseJsonResponse(result.stdout);
 
             if (!parsed.result) {
