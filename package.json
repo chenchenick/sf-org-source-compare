@@ -2,7 +2,7 @@
   "name": "sf-org-source-compare",
   "displayName": "Salesforce Org Source Compare",
   "description": "Compare source code between different Salesforce organizations with dual-editor interface",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "publisher": "chenology",
   "repository": {
     "type": "git",
@@ -30,7 +30,6 @@
     "devops"
   ],
   "license": "MIT",
-  "readme": "EXTENSION_README.md",
   "activationEvents": [
     "*"
   ],

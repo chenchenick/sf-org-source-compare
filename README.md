@@ -1,483 +1,135 @@
-# Salesforce Org Source Compare - Development
+# Salesforce Org Source Compare
 
 ![VSCode Extension](https://img.shields.io/badge/VSCode-Extension-blue.svg)
-![Version](https://img.shields.io/badge/version-0.0.1-green.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![TypeScript](https://img.shields.io/badge/TypeScript-4.9-blue.svg)
-![Node](https://img.shields.io/badge/Node.js-18+-green.svg)
+![Version](https://img.shields.io/badge/version-0.0.2-green.svg)
 
-**Developer documentation for the Salesforce Org Source Compare VS Code extension.**
+**Effortlessly compare source code and metadata between multiple Salesforce organizations directly in VS Code.**
 
-This extension enables seamless comparison and editing of source code and metadata between different Salesforce organizations using native SFDX directory structure, dependency injection architecture, and comprehensive error handling.
+Stop switching between browser tabs and complex tools. Get instant access to your Salesforce source code with smart caching, configurable metadata retrieval, and lightning-fast comparisons—all within your favorite editor.
 
-## 🏗️ Development Setup
+## 🚀 Quick Start
 
-### Prerequisites
+### 1. Install from VS Code Marketplace
+Search for "Salesforce Org Source Compare" in the Extensions view or [install directly](vscode:extension/chenology.sf-org-source-compare).
 
-- **Node.js**: 18.x or higher
-- **VS Code**: Version 1.102.0 or higher
-- **TypeScript**: 4.9 or higher
-- **Salesforce CLI v2**: For testing with real orgs
+### 2. Prerequisites
+- **Salesforce CLI v2**: Install from [developer.salesforce.com](https://developer.salesforce.com/tools/salesforcecli)
+- **Authenticated Orgs**: Connect your orgs with `sf org login web --alias my-org`
 
-### Installation
+### 3. Start Comparing
+1. Click the Salesforce icon in the Activity Bar
+2. Add your authenticated orgs with the **+** button
+3. Expand orgs to browse source files
+4. Right-click files to select for comparison
+5. Click the **diff** icon to compare side-by-side
 
-1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/chenchenick/sf-org-source-compare.git
-   cd sf-org-source-compare
-   ```
+## ✨ Key Features
 
-2. **Install Dependencies**:
-   ```bash
-   npm install
-   ```
+### 🏢 Multi-Org Management Made Simple
+- **One-Click Access**: Add any authenticated Salesforce org instantly
+- **Smart Caching**: Files load instantly from cache, refresh only when needed
+- **Live Progress**: Real-time indicators for all operations
+- **Inline Config**: Configure metadata types with the gear button next to each org
 
-3. **Build the Extension**:
-   ```bash
-   npm run compile
-   ```
+### 🗂️ Powerful Metadata Control
+- **25+ Metadata Types**: ApexClass, LWC, Flows, CustomObjects, TestSuites, and more
+- **Per-Org Configuration**: Customize what to retrieve for each organization
+- **Category Organization**: Metadata grouped by Apex, Components, Security, Analytics, etc.
+- **Quick Presets**: Enable All Types, Core Only, or Reset to Defaults
 
-4. **Run in Development**:
-   - Press `F5` to open a new VS Code Extension Host window
-   - Or use the debugger with the provided launch configuration
+### ⚡ Lightning-Fast Comparisons
+- **Instant Diff**: Compare files using VS Code's native diff editor
+- **No Network Delays**: All comparisons use locally cached files
+- **Smart Selection**: Click to open, right-click to select for comparison
+- **Visual Indicators**: Selected files show numbered badges [1] and [2]
 
-### Development Scripts
+### 🎯 Native Salesforce Structure
+- **Real SFDX Layout**: Browse actual `force-app/main/default/` directory structure
+- **Complete Coverage**: Classes, triggers, LWC, Aura, objects, flows, test suites
+- **Click to Edit**: Open any file directly in VS Code with full syntax highlighting
+- **State Preservation**: Folder expansion remembered across sessions
 
-```bash
-# Type checking
-npm run check-types
+## 🎮 How to Use
 
-# Linting
-npm run lint
+### Adding Organizations
+1. Click the **+** icon in the extension panel
+2. Select from your authenticated orgs (use `sf org list` to see available orgs)
+3. Configure metadata types with the gear button ⚙️
 
-# Watch mode for development
-npm run watch
+### Browsing Source Code
+1. Click an org name to expand and load source files
+2. Navigate through the native SFDX folder structure
+3. Click any file to open it in the VS Code editor
 
-# Build for production
-npm run package
+### Comparing Files
+1. **Right-click** first file → "Select File" (shows blue [1] badge)
+2. **Right-click** second file → "Select File" (shows red [2] badge)
+3. Click the **diff icon** in the toolbar
+4. View side-by-side comparison in VS Code's diff editor
 
-# Run tests
-npm test
-```
+### Customizing Metadata Types
+1. Click the **gear icon** ⚙️ next to any org name
+2. Choose from 25+ metadata types organized by category
+3. Use presets: "Enable All Types", "Core Types Only", or "Reset to Default"
+4. Preview generated manifest before saving
 
-## 🏛️ Architecture Overview
+## 🛠️ Settings & Preferences
 
-### Core Components
+Access **User Preferences** from the extension toolbar to customize:
 
-The extension follows a modern TypeScript architecture with dependency injection, comprehensive error handling, and modular design:
+- **General**: Auto-refresh behavior, progress indicators
+- **Source Retrieval**: API version, timeout settings, metadata types
+- **File Comparison**: Diff settings, selection behavior
+- **Error Handling**: Error display preferences, retry behavior
+- **Advanced**: Logging levels, cache settings, concurrent requests
 
-```
-src/
-├── extension.ts                     # Extension activation and DI container setup
-├── di/
-│   ├── Container.ts                 # Dependency injection container
-│   └── ServiceRegistration.ts      # Service lifetime management
-├── providers/
-│   └── SfOrgCompareProvider.ts     # Tree data provider with smart caching
-├── services/
-│   ├── FileCompareService.ts       # Local file comparison logic
-│   ├── SourceRetrievalService.ts   # SFDX manifest-based retrieval
-│   └── ManifestManager.ts          # Org-specific manifest configuration
-├── metadata/
-│   └── EnhancedOrgManager.ts       # Advanced org management with caching
-├── webview/
-│   ├── ManifestConfigurationWebview.ts  # Manifest config UI
-│   └── UserPreferencesWebview.ts        # Settings management UI
-├── progress/
-│   └── ProgressManager.ts          # Operation progress tracking
-├── errors/
-│   ├── ErrorHandler.ts             # Standardized error handling
-│   └── UserErrorReporter.ts        # User-friendly error reporting
-└── types/
-    └── index.ts                    # TypeScript type definitions
-```
+## 🆘 Common Issues
 
-### Key Architecture Patterns
+**"No organizations found"**
+- Run `sf org list` to check authenticated orgs
+- Re-authenticate: `sf org login web --alias my-org`
 
-#### Dependency Injection
-- **Container-based DI**: All services registered in `Container.ts`
-- **Service Lifetimes**: Singleton, Transient, and Scoped service management
-- **Automatic Resolution**: Dependencies injected automatically based on constructor parameters
+**"Files not loading"**
+- Click the refresh button to reload from Salesforce
+- Check org permissions and network connectivity
 
-#### Error Handling Strategy
-- **Standardized Errors**: All errors processed through `ErrorHandler.standardizeError()`
-- **User-Friendly Reporting**: Interactive error messages with suggested actions
-- **Error Classification**: Authentication, Network, Metadata, File System error types
+**"TestSuites not showing"**
+- Ensure ApexTestSuite is enabled in manifest configuration
+- Check if your org has test suites created
 
-#### Smart Caching
-- **Org-Level Caching**: Files cached per organization with timestamp tracking
-- **Force Refresh**: Explicit refresh from Salesforce vs. cached display
-- **Cache Invalidation**: Automatic cleanup on org removal or explicit cache clearing
+**Extension not responding**
+- Reload VS Code window: `Ctrl+Shift+P` → "Developer: Reload Window"
+- Check Output panel → "SF Org Source Compare" for logs
 
-#### Progress Management
-- **Operation-Specific**: Different progress patterns for various operations
-- **Cancellable**: Users can cancel long-running operations
-- **Time Estimation**: Smart progress reporting with completion estimates
+## 🔧 Pro Tips
 
-## 🔧 Building and Testing
-
-### TypeScript Compilation
-
-The project uses ESBuild for fast compilation:
-
-```bash
-# Development build with watch
-npm run watch
-
-# Production build with minification
-npm run package
-
-# Type checking only
-npm run check-types
-```
-
-### Testing Strategy
-
-```bash
-# Run all tests
-npm test
-
-# Compile tests
-npm run compile-tests
-
-# Watch tests during development
-npm run watch-tests
-```
-
-### Test Structure
-
-- **Unit Tests**: Individual service and utility testing
-- **Integration Tests**: End-to-end workflow testing
-- **Mock Services**: Comprehensive mocking for Salesforce CLI interactions
+- **Smart Caching**: Files display instantly from cache. Use refresh only when you need latest changes from Salesforce
+- **Keyboard Shortcuts**: Use `Ctrl+Shift+P` and search "SF Org Compare" for all available commands
+- **Multiple Comparisons**: You can have multiple diff editors open simultaneously
+- **Custom Metadata**: Configure different metadata types per org based on your needs
+- **Progress Tracking**: Long operations show detailed progress with cancellation options
 
 ## 🤝 Contributing
 
-### Development Workflow
+We welcome contributions! See our [Development Guide](DEVELOPMENT.md) for technical details.
 
-1. **Fork the Repository**
-2. **Create Feature Branch**: `git checkout -b feature/amazing-feature`
-3. **Make Changes**: Follow TypeScript and ESLint conventions
-4. **Add Tests**: Ensure new functionality is tested
-5. **Run Quality Checks**:
-   ```bash
-   npm run check-types
-   npm run lint
-   npm test
-   ```
-6. **Submit Pull Request**: Include detailed description of changes
-
-### Code Style Guidelines
-
-- **TypeScript Strict Mode**: All code must pass strict type checking
-- **ESLint Rules**: Follow configured ESLint rules for consistency
-- **Error Handling**: Use standardized error handling patterns
-- **Dependency Injection**: Register all services in the DI container
-- **Documentation**: Add JSDoc comments for public APIs
-
-### Adding New Features
-
-1. **Service Registration**: Register new services in `ServiceRegistration.ts`
-2. **Error Handling**: Use `ErrorHandler.standardizeError()` for all errors
-3. **Progress Tracking**: Use `ProgressManager` for long-running operations
-4. **Configuration**: Add settings to VS Code configuration schema in `package.json`
-5. **Testing**: Add comprehensive unit and integration tests
-
-## 🔍 Key Technical Features
-
-### Manifest-Based Metadata Retrieval
-- **25+ Metadata Types**: Comprehensive coverage of Salesforce metadata
-- **Per-Org Configuration**: Customizable metadata type selection
-- **XML Generation**: Dynamic package.xml generation based on configuration
-
-### SFDX Integration
-- **CLI Command Abstraction**: Robust SF/SFDX CLI command execution
-- **Process Management**: Timeout handling and process cleanup
-- **JSON Response Parsing**: Structured handling of CLI responses
-
-### Webview Integration
-- **VS Code Theming**: Native VS Code theme integration
-- **Bidirectional Communication**: Extension ↔ Webview message passing
-- **Rich UI Components**: Professional configuration and preference interfaces
-
-### Performance Optimizations
-- **Local File Operations**: Direct file system access for comparisons
-- **Concurrent Processing**: Parallel metadata operations where possible
-- **Smart Deduplication**: Prevent redundant concurrent operations
-- **Memory Management**: Efficient caching with automatic cleanup
-
-## 🧪 Testing
-
-### Running Tests
-
-The extension includes comprehensive test suites covering all major components:
-
-```bash
-# Run all tests
-npm test
-
-# Run specific test files
-npm run test -- --grep "ManifestManager"
-
-# Run tests with coverage
-npm run test:coverage
-```
-
-### Test Categories
-
-#### Unit Tests
-- **Service Layer**: ManifestManager, SourceRetrievalService, FileCompareService
-- **Error Handling**: ErrorHandler, UserErrorReporter
-- **Progress Management**: ProgressManager operations
-- **Dependency Injection**: Container registration and resolution
-
-#### Integration Tests
-- **End-to-End Workflows**: Org authentication → source retrieval → file comparison
-- **CLI Integration**: SFDX command execution and response parsing
-- **Webview Communication**: Extension ↔ webview message handling
-
-#### Mock Strategy
-- **SFDX CLI**: Mocked SF CLI responses for consistent testing
-- **File System**: Virtual file system for isolated testing
-- **VS Code API**: Comprehensive VS Code API mocking
-
-### Test Data
-
-```bash
-test/
-├── fixtures/
-│   ├── sfdx-responses/       # Mock SFDX CLI JSON responses
-│   ├── manifest-samples/     # Sample package.xml files
-│   └── org-configs/          # Test organization configurations
-├── unit/
-│   ├── services/            # Service layer unit tests
-│   ├── providers/           # Tree provider tests
-│   └── utils/               # Utility function tests
-└── integration/
-    ├── workflows/           # End-to-end workflow tests
-    └── cli-integration/     # SFDX CLI integration tests
-```
-
-## 🔍 Debugging
-
-### VS Code Debug Configuration
-
-The project includes launch configurations for debugging:
-
-```json
-{
-    "name": "Run Extension",
-    "type": "extensionHost",
-    "request": "launch",
-    "runtimeExecutable": "${execPath}",
-    "args": ["--extensionDevelopmentPath=${workspaceFolder}"]
-}
-```
-
-### Debug Techniques
-
-#### Extension Host Debugging
-1. Press `F5` to launch Extension Development Host
-2. Set breakpoints in TypeScript source files
-3. Use VS Code's integrated debugger
-
-#### Logging Strategy
-```typescript
-// Use consistent logging patterns
-console.log('🔧 SERVICE:', 'Operation description', data);
-console.error('❌ ERROR:', 'Error context', error);
-console.warn('⚠️ WARNING:', 'Warning message');
-```
-
-#### Output Channel
-- Extension logs appear in VS Code Output panel
-- Select "SF Org Source Compare" from the dropdown
-- Configure log levels via user preferences
-
-### Common Debug Scenarios
-
-#### SFDX CLI Issues
-```bash
-# Verify CLI installation
-sf --version
-
-# Test org authentication
-sf org list --json
-
-# Debug manifest retrieval
-sf project retrieve start --manifest package.xml --json
-```
-
-#### Extension Loading Issues
-```bash
-# Check extension logs
-code --log-level debug --extensionDevelopmentPath=.
-
-# Reset extension state
-rm -rf ~/.vscode/extensions/*/globalStorage/*
-```
-
-## 🚀 Deployment & Publishing
-
-### Building for Production
-
-```bash
-# Create production build
-npm run package
-
-# Validate extension package
-vsce ls
-
-# Package as VSIX for distribution
-vsce package
-```
-
-### Publishing to VS Code Marketplace
-
-```bash
-# Install VSCE (Visual Studio Code Extension manager)
-npm install -g vsce
-
-# Login to publisher account
-vsce login chenology
-
-# Publish new version
-vsce publish minor
-
-# Publish specific version
-vsce publish 1.0.0
-```
-
-### Release Process
-
-1. **Update Version**: Bump version in `package.json`
-2. **Update Changelog**: Document new features and fixes
-3. **Run Quality Gates**:
-   ```bash
-   npm run check-types
-   npm run lint
-   npm test
-   npm run package
-   ```
-4. **Create Release Tag**: `git tag v1.0.0`
-5. **Publish Extension**: `vsce publish`
-6. **GitHub Release**: Create release notes on GitHub
-
-## 🔧 Configuration Management
-
-### VS Code Settings Schema
-
-The extension contributes configuration settings defined in `package.json`:
-
-```json
-{
-  "contributes": {
-    "configuration": {
-      "properties": {
-        "sfOrgSourceCompare.apiVersion": {
-          "type": "string",
-          "enum": ["58.0", "59.0", "60.0", "61.0"],
-          "default": "58.0"
-        },
-        "sfOrgSourceCompare.defaultTimeout": {
-          "type": "number",
-          "default": 30000
-        }
-      }
-    }
-  }
-}
-```
-
-### Environment Variables
-
-```bash
-# Development environment
-VSCODE_DEBUG=true
-SF_CLI_PATH=/usr/local/bin/sf
-
-# Testing environment
-NODE_ENV=test
-MOCK_SFDX_RESPONSES=true
-```
-
-### Extension Settings
-
-Settings are managed through the ConfigurationManager singleton:
-
-```typescript
-// Get configuration value
-const apiVersion = ConfigurationManager.getInstance().getApiVersion();
-
-// Update configuration
-await vscode.workspace.getConfiguration('sfOrgSourceCompare')
-  .update('apiVersion', '59.0', vscode.ConfigurationTarget.Global);
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-### Development Setup
-
+### Quick Contribution Steps
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/amazing-feature`
 3. Make your changes and add tests
 4. Run tests: `npm test`
 5. Submit a pull request
 
-### Testing
+For detailed development setup, architecture overview, and testing guidelines, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
-```bash
-# Run TypeScript checks
-npm run check-types
-
-# Run linting  
-npm run lint
-
-# Run all tests
-npm test
-
-# Compile and build
-npm run compile
-```
-
-## 📈 Performance Benchmarks
-
-- **Source Retrieval**: ~30-60 seconds (one-time per org)
-- **File Opening**: ~50ms (local file access)
-- **File Comparison**: ~100ms (local diff generation)
-- **Tree Navigation**: <10ms (cached data)
-- **Memory Usage**: <50MB per org (including cached source)
-
-## 🔄 Changelog
-
-### Version 0.0.1
-- ✅ Native SFDX directory structure implementation
-- ✅ Click-to-open file functionality
-- ✅ Optimized local file comparisons
-- ✅ Comprehensive metadata support via SFDX manifest
-- ✅ Enhanced folder management with state preservation
-- ✅ Performance optimizations and caching improvements
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built with [VS Code Extension API](https://code.visualstudio.com/api)
-- Powered by [Salesforce CLI v2](https://developer.salesforce.com/tools/salesforcecli)
-- Uses native SFDX project structure and manifest deployment
-- Inspired by the Salesforce developer community
-
----
-
-## 📞 Support
+## 📞 Support & Feedback
 
 - **Issues**: [GitHub Issues](https://github.com/chenchenick/sf-org-source-compare/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/chenchenick/sf-org-source-compare/discussions)
+- **Feature Requests**: [GitHub Discussions](https://github.com/chenchenick/sf-org-source-compare/discussions)
 - **Email**: chen@chenology.com
 
 ---
 
-**Made with ❤️ for the Salesforce Developer Community**
+**Transform your Salesforce development workflow. Install now and start comparing!**
+
+Made with ❤️ for the Salesforce Developer Community
