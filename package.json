@@ -30,6 +30,7 @@
     "devops"
   ],
   "license": "MIT",
+  "readme": "EXTENSION_README.md",
   "activationEvents": [
     "*"
   ],
