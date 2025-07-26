@@ -2,7 +2,8 @@
   "name": "sf-org-source-compare",
   "displayName": "Salesforce Org Source Compare",
   "description": "Compare source code between different Salesforce organizations with dual-editor interface",
-  "version": "0.0.3",
+  "version": "0.0.4",
+  "icon": "icon.png",
   "publisher": "chenology",
   "repository": {
     "type": "git",

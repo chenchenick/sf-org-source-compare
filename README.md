@@ -1,7 +1,7 @@
 # Salesforce Org Source Compare
 
 ![VSCode Extension](https://img.shields.io/badge/VSCode-Extension-blue.svg)
-![Version](https://img.shields.io/badge/version-0.0.2-green.svg)
+![Version](https://img.shields.io/badge/version-0.0.4-green.svg)
 
 **Effortlessly compare source code and metadata between multiple Salesforce organizations directly in VS Code.**
 
