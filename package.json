@@ -110,6 +110,12 @@
         "title": "User Preferences",
         "category": "SF Org Compare",
         "icon": "$(preferences-open)"
+      },
+      {
+        "command": "sf-org-source-compare.openFileSearch",
+        "title": "Search Files Across Orgs",
+        "category": "SF Org Compare",
+        "icon": "$(search)"
       }
     ],
     "viewsContainers": {
@@ -166,6 +172,11 @@
           "command": "sf-org-source-compare.openUserPreferences",
           "when": "view == sfOrgCompareView",
           "group": "configuration"
+        },
+        {
+          "command": "sf-org-source-compare.openFileSearch",
+          "when": "view == sfOrgCompareView",
+          "group": "navigation"
         }
       ],
       "view/item/context": [

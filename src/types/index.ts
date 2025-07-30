@@ -16,6 +16,7 @@ export interface OrgFile {
     isMetaFile?: boolean;
     filePath?: string;
     bundleName?: string;
+    orgDisplayName?: string; // For webview display
 }
 
 export interface CompareSelection {

@@ -27,6 +27,7 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
     private userErrorReporter: UserErrorReporter;
     private progressManager: ProgressManager;
 
+
     public async refresh(): Promise<void> {
         console.log('🔄 Refresh button clicked - starting refresh...');
         
@@ -86,6 +87,7 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
         }
         
         console.log('🔄 Refresh complete - updating tree view');
+        
         this._onDidChangeTreeData.fire();
     }
 
@@ -277,8 +279,11 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
         } else if (element.type === ItemType.File) {
             // Check if this file is selected for comparison
             const selectedFiles = this.fileCompareService.getSelectedFiles();
-            const isSelected = selectedFiles.some(f => f.id === element.file?.id);
-            const selectionIndex = selectedFiles.findIndex(f => f.id === element.file?.id);
+            // For search results, use the original file id for comparison
+            const fileId = element.file?.id || '';
+            const originalFileId = fileId.startsWith('search-') ? fileId.substring(7) : fileId;
+            const isSelected = selectedFiles.some(f => f.id === originalFileId || f.id === fileId);
+            const selectionIndex = selectedFiles.findIndex(f => f.id === originalFileId || f.id === fileId);
             const isComparing = this.fileCompareService.isComparingFiles();
             
             if (isSelected) {
@@ -318,7 +323,7 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
                 }
             } else {
                 treeItem.iconPath = new vscode.ThemeIcon('file');
-                treeItem.tooltip = 'Click to open file';
+                treeItem.tooltip = 'Click to open file, right-click to select for comparison';
                 treeItem.description = undefined;
                 treeItem.contextValue = 'file';
                 treeItem.command = {
@@ -414,6 +419,8 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
             }
         }
 
+
+
         if (orgs.length === 0) {
             items.push({
                 id: 'no-orgs',
@@ -423,22 +430,34 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
             return items;
         }
 
-        // Show all organizations with their files when expanded
+        // Show organizations
         items.push({
             id: 'available-orgs',
             label: `Organizations (${orgs.length})`,
             type: ItemType.Folder,
-            children: orgs.map(org => ({
+            children: this.getOrganizationItems(orgs)
+        });
+
+        return items;
+    }
+    
+    private getOrganizationItems(orgs: SalesforceOrg[]): TreeItem[] {
+        const orgItems: TreeItem[] = [];
+        
+        for (const org of orgs) {
+            // Show all orgs
+            orgItems.push({
                 id: org.id,
                 label: this.getOrgLabelWithTimestamp(org),
                 type: ItemType.Org,
                 orgId: org.id
                 // Don't set children here - let getChildren handle it dynamically
-            }))
-        });
-
-        return items;
+            });
+        }
+        
+        return orgItems;
     }
+    
 
     private async getOrgFiles(orgId: string, forceRefresh: boolean = false): Promise<TreeItem[]> {
         // Check if files are already cached - if so, return immediately without org calls

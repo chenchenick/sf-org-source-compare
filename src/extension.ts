@@ -5,6 +5,7 @@ import { EnhancedOrgManager } from './metadata/EnhancedOrgManager';
 import { FileCompareService } from './services/FileCompareService';
 import { ManifestConfigurationWebview } from './webview/ManifestConfigurationWebview';
 import { UserPreferencesWebview } from './webview/UserPreferencesWebview';
+import { FileSearchService } from './search/FileSearchService';
 import { UserErrorReporter } from './errors/UserErrorReporter';
 
 // Store DI container and service instances for cleanup
@@ -14,6 +15,7 @@ let fileCompareService: FileCompareService;
 let enhancedOrgManager: EnhancedOrgManager;
 let manifestConfigWebview: ManifestConfigurationWebview;
 let userPreferencesWebview: UserPreferencesWebview;
+let fileSearchService: FileSearchService;
 let userErrorReporter: UserErrorReporter;
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -36,12 +38,16 @@ export async function activate(context: vscode.ExtensionContext) {
 		manifestConfigWebview = container.resolve<ManifestConfigurationWebview>(ServiceTokens.MANIFEST_CONFIGURATION_WEBVIEW);
 		userPreferencesWebview = container.resolve<UserPreferencesWebview>(ServiceTokens.USER_PREFERENCES_WEBVIEW);
 		
+		// Create search service
+		fileSearchService = new FileSearchService(sfOrgCompareProvider, fileCompareService);
+		
 		// Create error reporting service
 		userErrorReporter = container.resolve<UserErrorReporter>(ServiceTokens.USER_ERROR_REPORTER);
 
 		console.log('📋 Registering tree data provider...');
 		vscode.window.registerTreeDataProvider('sfOrgCompareView', sfOrgCompareProvider);
 		console.log('✅ Tree data provider registered!');
+		
 
 		// Register commands
 		const openCompareView = vscode.commands.registerCommand('sf-org-source-compare.openCompareView', () => {
@@ -155,6 +161,17 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 		});
 
+		const openFileSearch = vscode.commands.registerCommand('sf-org-source-compare.openFileSearch', async () => {
+			try {
+				await fileSearchService.openFileSearch();
+			} catch (error) {
+				await userErrorReporter.reportOperationFailure(
+					'Open file search',
+					error as Error
+				);
+			}
+		});
+
 		// Register all commands with VS Code
 		context.subscriptions.push(
 			openCompareView,
@@ -170,7 +187,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			clearSelection,
 			cleanupTempFiles,
 			configureManifest,
-			openUserPreferences
+			openUserPreferences,
+			openFileSearch
 		);
 
 		console.log('✅ Extension activation completed successfully with DI');
