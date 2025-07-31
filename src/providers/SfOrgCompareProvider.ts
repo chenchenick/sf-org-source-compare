@@ -28,6 +28,7 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
     private progressManager: ProgressManager;
 
 
+
     public async refresh(): Promise<void> {
         console.log('🔄 Refresh button clicked - starting refresh...');
         
@@ -598,15 +599,7 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
      * Get org label with last refresh timestamp
      */
     private getOrgLabelWithTimestamp(org: SalesforceOrg): string {
-        const baseLabel = org.alias || org.username;
-        const lastRefresh = this.orgRefreshTimestamps.get(org.id);
-        
-        if (lastRefresh) {
-            const timeString = this.formatRefreshTime(lastRefresh);
-            return `${baseLabel} (last refreshed: ${timeString})`;
-        } else {
-            return baseLabel;
-        }
+        return org.alias || org.username;
     }
 
     /**

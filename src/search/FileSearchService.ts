@@ -144,22 +144,44 @@ export class FileSearchService {
     private createQuickPickItems(orgData: { orgId: string; orgName: string; files: (TreeItem & { fullPath?: string })[] }[]): vscode.QuickPickItem[] {
         const items: vscode.QuickPickItem[] = [];
 
-        for (const org of orgData) {
-            for (const file of org.files) {
+        // Sort orgs by name for consistent display
+        const sortedOrgData = orgData.sort((a, b) => a.orgName.localeCompare(b.orgName));
+
+        for (const org of sortedOrgData) {
+            if (org.files.length === 0) {
+                continue;
+            }
+
+            // Add org header as separator (non-selectable)
+            const orgHeader: vscode.QuickPickItem = {
+                label: `$(organization) ${org.orgName}`,
+                description: `${org.files.length} files`,
+                detail: '────────────────────────────────────────',
+                kind: vscode.QuickPickItemKind.Separator
+            };
+            items.push(orgHeader);
+
+            // Sort files within org for better organization
+            const sortedFiles = org.files.sort((a, b) => {
+                // Sort by folder path first, then by file name
+                const aPath = a.fullPath || a.label;
+                const bPath = b.fullPath || b.label;
+                return aPath.localeCompare(bPath);
+            });
+
+            // Add files under this org
+            for (const file of sortedFiles) {
                 if (file.file) {
                     const item: vscode.QuickPickItem & { orgFile: OrgFile } = {
-                        label: file.file.name,
-                        description: `$(organization) ${org.orgName}`,
-                        detail: file.fullPath ? `$(folder) ${file.fullPath}` : undefined,
+                        label: `  ${file.file.name}`, // Indent to show hierarchy
+                        description: file.fullPath ? `$(folder) ${org.orgName}/${file.fullPath}` : `$(folder) ${org.orgName}`,
+                        detail: undefined, // Keep detail clean for file items
                         orgFile: file.file
                     };
                     items.push(item);
                 }
             }
         }
-
-        // Sort items by label for better user experience
-        items.sort((a, b) => a.label.localeCompare(b.label));
 
         return items;
     }
@@ -175,4 +197,5 @@ export class FileSearchService {
             quickPick.title = undefined;
         }
     }
+
 }
