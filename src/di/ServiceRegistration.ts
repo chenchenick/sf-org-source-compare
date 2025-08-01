@@ -5,6 +5,7 @@ import { FileCompareService } from '../services/FileCompareService';
 import { SfOrgCompareProvider } from '../providers/SfOrgCompareProvider';
 import { SourceRetrievalService } from '../services/SourceRetrievalService';
 import { ManifestManager } from '../services/ManifestManager';
+import { OrgCacheService } from '../services/OrgCacheService';
 import { ManifestConfigurationWebview } from '../webview/ManifestConfigurationWebview';
 import { UserPreferencesWebview } from '../webview/UserPreferencesWebview';
 import { ConfigurationManager } from '../config/ConfigurationManager';
@@ -89,6 +90,13 @@ export function registerServices(container: Container): void {
     );
 
     container.register(
+        ServiceTokens.ORG_CACHE_SERVICE,
+        OrgCacheService,
+        ServiceLifetime.Singleton,
+        [ServiceTokens.EXTENSION_CONTEXT]
+    );
+
+    container.register(
         ServiceTokens.ENHANCED_ORG_MANAGER,
         EnhancedOrgManager,
         ServiceLifetime.Singleton,
@@ -107,7 +115,7 @@ export function registerServices(container: Container): void {
         ServiceTokens.SF_ORG_COMPARE_PROVIDER,
         SfOrgCompareProvider,
         ServiceLifetime.Singleton,
-        [ServiceTokens.ENHANCED_ORG_MANAGER, ServiceTokens.FILE_COMPARE_SERVICE]
+        [ServiceTokens.ENHANCED_ORG_MANAGER, ServiceTokens.FILE_COMPARE_SERVICE, ServiceTokens.ORG_CACHE_SERVICE]
     );
 
     // Webview services

@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { EnhancedOrgManager } from '../../metadata/EnhancedOrgManager';
 import { FileCompareService } from '../../services/FileCompareService';
 import { SfOrgCompareProvider } from '../../providers/SfOrgCompareProvider';
+import { OrgCacheService } from '../../services/OrgCacheService';
 import { SalesforceOrg, OrgFile, ItemType } from '../../types';
 
 suite('Extension Integration Test Suite', () => {
@@ -12,6 +13,7 @@ suite('Extension Integration Test Suite', () => {
     let mockExecAsync: sinon.SinonStub;
     let enhancedOrgManager: EnhancedOrgManager;
     let fileCompareService: FileCompareService;
+    let orgCacheService: OrgCacheService;
     let provider: SfOrgCompareProvider;
 
     // Test data
@@ -116,12 +118,13 @@ suite('Extension Integration Test Suite', () => {
         // Create real instances (not mocks) for integration testing
         enhancedOrgManager = new EnhancedOrgManager(mockContext);
         fileCompareService = new FileCompareService(enhancedOrgManager);
+        orgCacheService = new OrgCacheService(mockContext);
         // Mock EnhancedOrgManager for test
         const mockEnhancedOrgManager = {
             getOrgFilesByType: sinon.stub().resolves(new Map()),
             getFileContent: sinon.stub().resolves('mock content')
         } as any;
-        provider = new SfOrgCompareProvider(enhancedOrgManager, fileCompareService);
+        provider = new SfOrgCompareProvider(enhancedOrgManager, fileCompareService, orgCacheService);
     });
 
     teardown(() => {

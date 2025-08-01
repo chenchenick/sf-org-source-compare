@@ -6,6 +6,7 @@ import { EnhancedOrgManager } from '../metadata/EnhancedOrgManager';
 import { FileCompareService } from '../services/FileCompareService';
 import { UserErrorReporter } from '../errors/UserErrorReporter';
 import { ProgressManager } from '../progress/ProgressManager';
+import { OrgCacheService } from '../services/OrgCacheService';
 
 export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
@@ -18,14 +19,57 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
 
     constructor(
         private enhancedOrgManager: EnhancedOrgManager,
-        private fileCompareService: FileCompareService
+        private fileCompareService: FileCompareService,
+        private orgCacheService: OrgCacheService
     ) {
         this.userErrorReporter = UserErrorReporter.getInstance();
         this.progressManager = ProgressManager.getInstance();
+        this.initializeCacheOnStartup();
     }
 
     private userErrorReporter: UserErrorReporter;
     private progressManager: ProgressManager;
+
+    /**
+     * Initialize cache on startup by loading cached org files
+     */
+    private async initializeCacheOnStartup(): Promise<void> {
+        try {
+            console.log('🚀 Initializing org cache on startup...');
+            
+            // Get current orgs from org manager
+            const currentOrgs = this.enhancedOrgManager.getOrgs();
+            const currentOrgIds = currentOrgs.map(org => org.id);
+            
+            // Cleanup stale cache entries
+            this.orgCacheService.cleanupStaleCache(currentOrgIds);
+            
+            // Load cached files for current orgs
+            let loadedCount = 0;
+            for (const org of currentOrgs) {
+                if (this.orgCacheService.hasCachedFiles(org.id)) {
+                    const cachedFiles = this.orgCacheService.getCachedFiles(org.id);
+                    if (cachedFiles) {
+                        this.orgFilesCache.set(org.id, cachedFiles);
+                        const metadata = this.orgCacheService.getCacheMetadata(org.id);
+                        if (metadata) {
+                            this.orgRefreshTimestamps.set(org.id, metadata.lastRefreshed);
+                        }
+                        loadedCount++;
+                    }
+                }
+            }
+            
+            const stats = this.orgCacheService.getCacheStats();
+            console.log(`✅ Cache initialized: ${loadedCount}/${currentOrgs.length} orgs loaded from cache`);
+            console.log(`📊 Cache stats: ${stats.totalOrgs} orgs, ${stats.totalFiles} files, ${stats.cacheSize}`);
+            
+            // Refresh tree view to show cached data
+            this._onDidChangeTreeData.fire();
+        } catch (error) {
+            console.error('❌ Failed to initialize cache on startup:', error);
+        }
+    }
 
 
 
@@ -195,6 +239,9 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
             this.orgRefreshTimestamps.delete(orgItem.orgId);
             // Remove expanded folders for this org
             this.expandedFolders = this.expandedFolders.filter(id => !id.startsWith(orgItem.orgId!));
+            
+            // Remove from persistent cache
+            this.orgCacheService.removeCachedOrg(orgItem.orgId);
             
             this._onDidChangeTreeData.fire();
             vscode.window.showInformationMessage(`Removed organization: ${org.alias || org.username}`);
@@ -492,6 +539,12 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
             // Cache the results and set refresh timestamp
             this.orgFilesCache.set(orgId, folderItems);
             this.orgRefreshTimestamps.set(orgId, new Date());
+            
+            // Save to persistent cache
+            const org = this.enhancedOrgManager.getOrg(orgId);
+            if (org) {
+                this.orgCacheService.cacheOrgFiles(orgId, org, folderItems);
+            }
             
             return folderItems;
         } catch (error) {

@@ -4,12 +4,14 @@ import * as vscode from 'vscode';
 import { SfOrgCompareProvider } from '../../providers/SfOrgCompareProvider';
 import { EnhancedOrgManager } from '../../metadata/EnhancedOrgManager';
 import { FileCompareService } from '../../services/FileCompareService';
+import { OrgCacheService } from '../../services/OrgCacheService';
 import { SalesforceOrg, OrgFile, TreeItem, ItemType } from '../../types';
 
 suite('SfOrgCompareProvider Test Suite', () => {
     let provider: SfOrgCompareProvider;
     let mockEnhancedOrgManager: sinon.SinonStubbedInstance<EnhancedOrgManager>;
     let mockFileCompareService: sinon.SinonStubbedInstance<FileCompareService>;
+    let mockOrgCacheService: sinon.SinonStubbedInstance<OrgCacheService>;
     let showWarningMessageStub: sinon.SinonStub;
     let showInformationMessageStub: sinon.SinonStub;
     let showErrorMessageStub: sinon.SinonStub;
@@ -60,6 +62,7 @@ suite('SfOrgCompareProvider Test Suite', () => {
         // Create stubbed dependencies
         mockEnhancedOrgManager = sinon.createStubInstance(EnhancedOrgManager);
         mockFileCompareService = sinon.createStubInstance(FileCompareService);
+        mockOrgCacheService = sinon.createStubInstance(OrgCacheService);
 
         // Mock VSCode methods
         showWarningMessageStub = sinon.stub(vscode.window, 'showWarningMessage');
@@ -72,8 +75,10 @@ suite('SfOrgCompareProvider Test Suite', () => {
         mockEnhancedOrgManager.getOrg.withArgs('org1-id').returns(sampleOrg1);
         mockEnhancedOrgManager.getOrg.withArgs('org2-id').returns(sampleOrg2);
         mockFileCompareService.getSelectedFiles.returns([]);
+        mockOrgCacheService.hasCachedFiles.returns(false);
+        mockOrgCacheService.getCachedFiles.returns(null);
 
-        provider = new SfOrgCompareProvider(mockEnhancedOrgManager as any, mockFileCompareService as any);
+        provider = new SfOrgCompareProvider(mockEnhancedOrgManager as any, mockFileCompareService as any, mockOrgCacheService as any);
     });
 
     teardown(() => {
@@ -82,7 +87,7 @@ suite('SfOrgCompareProvider Test Suite', () => {
 
     suite('Constructor', () => {
         test('should initialize with empty expanded orgs and cache', () => {
-            const newProvider = new SfOrgCompareProvider(mockEnhancedOrgManager as any, mockFileCompareService as any);
+            const newProvider = new SfOrgCompareProvider(mockEnhancedOrgManager as any, mockFileCompareService as any, mockOrgCacheService as any);
             assert.ok(newProvider);
         });
     });
@@ -502,7 +507,7 @@ suite('SfOrgCompareProvider Test Suite', () => {
     suite('edge cases and error handling', () => {
         test('should handle provider with no dependencies', () => {
             try {
-                new SfOrgCompareProvider(null as any, null as any);
+                new SfOrgCompareProvider(null as any, null as any, null as any);
                 assert.fail('Should throw error with null dependencies');
             } catch (error) {
                 // Expected behavior

@@ -5,6 +5,7 @@ import * as extension from '../extension';
 import { EnhancedOrgManager } from '../metadata/EnhancedOrgManager';
 import { FileCompareService } from '../services/FileCompareService';
 import { SfOrgCompareProvider } from '../providers/SfOrgCompareProvider';
+import { OrgCacheService } from '../services/OrgCacheService';
 import { 
     createMockContext, 
     setupVSCodeMocks, 
@@ -79,12 +80,14 @@ suite('Extension Test Suite', () => {
     suite('Command Handlers', () => {
         let enhancedOrgManager: EnhancedOrgManager;
         let fileCompareService: FileCompareService;
+        let orgCacheService: OrgCacheService;
         let provider: SfOrgCompareProvider;
 
         setup(() => {
             enhancedOrgManager = new EnhancedOrgManager(mockContext);
             fileCompareService = new FileCompareService(enhancedOrgManager);
-            provider = new SfOrgCompareProvider(enhancedOrgManager, fileCompareService);
+            orgCacheService = new OrgCacheService(mockContext);
+            provider = new SfOrgCompareProvider(enhancedOrgManager, fileCompareService, orgCacheService);
         });
 
         test('should handle openCompareView command', async () => {

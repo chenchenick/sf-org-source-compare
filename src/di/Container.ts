@@ -224,6 +224,7 @@ export const ServiceTokens = {
     MANIFEST_MANAGER: 'ManifestManager',
     MANIFEST_CONFIGURATION_WEBVIEW: 'ManifestConfigurationWebview',
     USER_PREFERENCES_WEBVIEW: 'UserPreferencesWebview',
+    ORG_CACHE_SERVICE: 'OrgCacheService',
     
     // Configuration services
     CONFIGURATION_MANAGER: 'ConfigurationManager',

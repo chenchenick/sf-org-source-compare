@@ -7,6 +7,7 @@ import { FileCompareService } from '../../services/FileCompareService';
 import { EnhancedOrgManager } from '../../metadata/EnhancedOrgManager';
 import { SourceRetrievalService } from '../../services/SourceRetrievalService';
 import { ManifestManager } from '../../services/ManifestManager';
+import { OrgCacheService } from '../../services/OrgCacheService';
 import { SalesforceOrg, TreeItem, ItemType } from '../../types';
 
 suite('Complete Workflow Integration Tests', () => {
@@ -14,6 +15,7 @@ suite('Complete Workflow Integration Tests', () => {
     let fileCompareService: FileCompareService;
     let enhancedOrgManager: EnhancedOrgManager;
     let sourceRetrievalService: SourceRetrievalService;
+    let orgCacheService: OrgCacheService;
     let mockContext: vscode.ExtensionContext;
     let mockGlobalState: sinon.SinonStubbedInstance<vscode.Memento>;
     
@@ -139,7 +141,8 @@ suite('Complete Workflow Integration Tests', () => {
         const manifestManager = new ManifestManager(mockContext);
         sourceRetrievalService = new SourceRetrievalService(manifestManager);
         fileCompareService = new FileCompareService(enhancedOrgManager);
-        sfOrgCompareProvider = new SfOrgCompareProvider(enhancedOrgManager, fileCompareService);
+        orgCacheService = new OrgCacheService(mockContext);
+        sfOrgCompareProvider = new SfOrgCompareProvider(enhancedOrgManager, fileCompareService, orgCacheService);
 
         await enhancedOrgManager.initialize();
     });
