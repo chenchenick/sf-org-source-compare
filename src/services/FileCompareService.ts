@@ -2,14 +2,16 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { CompareSelection, OrgFile } from '../types';
+import { CompareSelection, OrgFile, MultiCompareSelection } from '../types';
 import { EnhancedOrgManager } from '../metadata/EnhancedOrgManager';
 import { ProgressManager } from '../progress/ProgressManager';
 import { ConfigurationManager, SF_CONFIG } from '../config';
 import { ErrorHandler, ErrorHandlingStrategy, ErrorUtils } from '../errors/ErrorHandler';
+import { getContainer, ServiceTokens } from '../di';
 
 export class FileCompareService {
     private selectedFiles: OrgFile[] = [];
+    private maxFiles: number = SF_CONFIG.COMPARE.DEFAULT_MAX_FILES;
     private enhancedOrgManager: EnhancedOrgManager;
     private tempDir: string;
     private sessionId: string;
@@ -42,8 +44,8 @@ export class FileCompareService {
             // File is already selected, remove it (toggle off)
             this.selectedFiles.splice(existingIndex, 1);
         } else {
-            // Add file to selection (max 2 files)
-            if (this.selectedFiles.length >= 2) {
+            // Add file to selection (up to maxFiles)
+            if (this.selectedFiles.length >= this.maxFiles) {
                 // Replace the oldest selection
                 this.selectedFiles.shift();
             }
@@ -69,7 +71,38 @@ export class FileCompareService {
     }
 
     public canCompare(): boolean {
-        return this.selectedFiles.length === 2;
+        return this.selectedFiles.length >= 2;
+    }
+
+    public getCompareType(): 'two-way' | 'three-way' | 'four-way' | 'multi-way' {
+        const count = this.selectedFiles.length;
+        if (count === 2) return 'two-way';
+        if (count === 3) return 'three-way';
+        if (count === 4) return 'four-way';
+        return 'multi-way';
+    }
+
+    public getMaxFiles(): number {
+        return this.maxFiles;
+    }
+
+    public setMaxFiles(maxFiles: number): void {
+        if (maxFiles < 2) {
+            throw new Error('Maximum files must be at least 2');
+        }
+        if (maxFiles > SF_CONFIG.COMPARE.MAX_FILES) {
+            throw new Error(`Maximum files cannot exceed ${SF_CONFIG.COMPARE.MAX_FILES}`);
+        }
+        
+        this.maxFiles = maxFiles;
+        
+        // Trim selection if it exceeds new limit
+        if (this.selectedFiles.length > maxFiles) {
+            this.selectedFiles = this.selectedFiles.slice(-maxFiles);
+            this.updateStatusBar();
+            this.updateStatusBarItem();
+            vscode.commands.executeCommand('sf-org-source-compare.refreshTreeView');
+        }
     }
 
     public isComparingFiles(): boolean {
@@ -78,8 +111,25 @@ export class FileCompareService {
 
     public async compareSelectedFiles(): Promise<void> {
         if (!this.canCompare()) {
-            vscode.window.showWarningMessage('Please select 2 files to compare.');
+            vscode.window.showWarningMessage('Please select at least 2 files to compare.');
             return;
+        }
+
+        const compareType = this.getCompareType();
+        
+        // Handle multi-way comparison
+        if (compareType !== 'two-way') {
+            const result = await vscode.window.showInformationMessage(
+                `${compareType} comparison selected (${this.selectedFiles.length} files). Open multi-way comparison view?`,
+                'Open Multi-Way View', 'Compare First 2', 'Cancel'
+            );
+            
+            if (result === 'Open Multi-Way View') {
+                await this.openMultiWayComparison();
+                return;
+            } else if (result !== 'Compare First 2') {
+                return;
+            }
         }
 
         const file1 = this.selectedFiles[0];
@@ -267,10 +317,44 @@ export class FileCompareService {
             this.statusBarItem.text = `$(file) SF Compare: ${this.selectedFiles[0].name} (select 1 more)`;
             this.statusBarItem.tooltip = 'Select one more file to compare';
             this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
-        } else {
+        } else if (this.selectedFiles.length === 2) {
             this.statusBarItem.text = `$(diff) SF Compare: Ready to compare`;
             this.statusBarItem.tooltip = `Ready to compare ${this.selectedFiles[0].name} ↔ ${this.selectedFiles[1].name}`;
             this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
+        } else {
+            const compareType = this.getCompareType();
+            this.statusBarItem.text = `$(diff) SF Compare: ${compareType} ready`;
+            this.statusBarItem.tooltip = `Ready for ${compareType} comparison (${this.selectedFiles.length} files selected)`;
+            this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
+        }
+    }
+
+    /**
+     * Open multi-way comparison view
+     */
+    private async openMultiWayComparison(): Promise<void> {
+        try {
+            const container = getContainer();
+            const multiFileCompareWebview = container.resolve(ServiceTokens.MULTI_FILE_COMPARE_WEBVIEW) as any;
+            const multiFileCompareService = container.resolve(ServiceTokens.MULTI_FILE_COMPARE_SERVICE) as any;
+
+            const selection: MultiCompareSelection = {
+                files: [...this.selectedFiles],
+                compareType: this.getCompareType(),
+                layout: multiFileCompareService.getRecommendedLayout(this.selectedFiles.length),
+                maxFiles: this.maxFiles
+            };
+
+            await multiFileCompareWebview.show(selection);
+            
+            vscode.window.showInformationMessage(
+                `Opening ${this.getCompareType()} comparison for ${this.selectedFiles.length} files`
+            );
+        } catch (error) {
+            console.error('Failed to open multi-way comparison:', error);
+            vscode.window.showErrorMessage(
+                `Failed to open multi-way comparison: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
         }
     }
 

@@ -26,6 +26,20 @@ export interface CompareSelection {
     rightOrg?: SalesforceOrg;
 }
 
+export interface MultiCompareSelection {
+    files: OrgFile[];
+    compareType: 'two-way' | 'three-way' | 'four-way' | 'multi-way';
+    layout: 'horizontal' | 'vertical' | 'grid';
+    maxFiles: number;
+}
+
+export interface CompareColors {
+    primary: string;
+    secondary: string;
+    icon: string;
+    emoji: string;
+}
+
 export enum ItemType {
     Org = 'org',
     File = 'file',

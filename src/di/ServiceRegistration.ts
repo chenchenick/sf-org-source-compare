@@ -8,6 +8,8 @@ import { ManifestManager } from '../services/ManifestManager';
 import { OrgCacheService } from '../services/OrgCacheService';
 import { ManifestConfigurationWebview } from '../webview/ManifestConfigurationWebview';
 import { UserPreferencesWebview } from '../webview/UserPreferencesWebview';
+import { MultiFileCompareWebview } from '../webview/MultiFileCompareWebview';
+import { MultiFileCompareService } from '../services/MultiFileCompareService';
 import { ConfigurationManager } from '../config/ConfigurationManager';
 import { SecureCommandExecutor } from '../security/SecureCommandExecutor';
 import { ErrorHandler } from '../errors/ErrorHandler';
@@ -118,6 +120,14 @@ export function registerServices(container: Container): void {
         [ServiceTokens.ENHANCED_ORG_MANAGER, ServiceTokens.FILE_COMPARE_SERVICE, ServiceTokens.ORG_CACHE_SERVICE]
     );
 
+    // Multi-way comparison services
+    container.register(
+        ServiceTokens.MULTI_FILE_COMPARE_SERVICE,
+        MultiFileCompareService,
+        ServiceLifetime.Singleton,
+        [ServiceTokens.ENHANCED_ORG_MANAGER]
+    );
+
     // Webview services
     container.register(
         ServiceTokens.MANIFEST_CONFIGURATION_WEBVIEW,
@@ -131,6 +141,13 @@ export function registerServices(container: Container): void {
         UserPreferencesWebview,
         ServiceLifetime.Singleton,
         [ServiceTokens.EXTENSION_CONTEXT]
+    );
+
+    container.register(
+        ServiceTokens.MULTI_FILE_COMPARE_WEBVIEW,
+        MultiFileCompareWebview,
+        ServiceLifetime.Singleton,
+        [ServiceTokens.EXTENSION_CONTEXT, ServiceTokens.MULTI_FILE_COMPARE_SERVICE]
     );
 }
 

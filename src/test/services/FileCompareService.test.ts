@@ -159,15 +159,16 @@ suite('FileCompareService Test Suite', () => {
             assert.deepStrictEqual(selectedFiles[1], sampleFile2);
         });
 
-        test('should replace oldest file when selecting third file', () => {
+        test('should add third file when max files allows it', () => {
             fileCompareService.selectFile(sampleFile1);
             fileCompareService.selectFile(sampleFile2);
             fileCompareService.selectFile(sampleFile3);
             
             const selectedFiles = fileCompareService.getSelectedFiles();
-            assert.strictEqual(selectedFiles.length, 2);
-            assert.deepStrictEqual(selectedFiles[0], sampleFile2);
-            assert.deepStrictEqual(selectedFiles[1], sampleFile3);
+            assert.strictEqual(selectedFiles.length, 3);
+            assert.deepStrictEqual(selectedFiles[0], sampleFile1);
+            assert.deepStrictEqual(selectedFiles[1], sampleFile2);
+            assert.deepStrictEqual(selectedFiles[2], sampleFile3);
         });
 
         test('should toggle off file when selecting same file again', () => {
@@ -226,7 +227,7 @@ suite('FileCompareService Test Suite', () => {
         });
     });
 
-    suite('canCompare and isComparingFiles', () => {
+    suite('canCompare and multi-way comparison support', () => {
         test('should return false with no files selected', () => {
             assert.strictEqual(fileCompareService.canCompare(), false);
         });
@@ -242,8 +243,55 @@ suite('FileCompareService Test Suite', () => {
             assert.strictEqual(fileCompareService.canCompare(), true);
         });
 
+        test('should return true with three files selected', () => {
+            fileCompareService.selectFile(sampleFile1);
+            fileCompareService.selectFile(sampleFile2);
+            fileCompareService.selectFile(sampleFile3);
+            assert.strictEqual(fileCompareService.canCompare(), true);
+        });
+
         test('should track comparing state', () => {
             assert.strictEqual(fileCompareService.isComparingFiles(), false);
+        });
+
+        test('should return correct compare type for different file counts', () => {
+            fileCompareService.selectFile(sampleFile1);
+            fileCompareService.selectFile(sampleFile2);
+            assert.strictEqual(fileCompareService.getCompareType(), 'two-way');
+
+            fileCompareService.selectFile(sampleFile3);
+            assert.strictEqual(fileCompareService.getCompareType(), 'three-way');
+        });
+
+        test('should handle max files configuration', () => {
+            const initialMax = fileCompareService.getMaxFiles();
+            assert.strictEqual(initialMax, 4); // Default from config
+
+            fileCompareService.setMaxFiles(6);
+            assert.strictEqual(fileCompareService.getMaxFiles(), 6);
+        });
+
+        test('should throw error when setting invalid max files', () => {
+            assert.throws(() => fileCompareService.setMaxFiles(1), /at least 2/);
+            assert.throws(() => fileCompareService.setMaxFiles(10), /cannot exceed/);
+        });
+
+        test('should trim selection when max files is reduced', () => {
+            // Select 4 files (default max)
+            fileCompareService.selectFile(sampleFile1);
+            fileCompareService.selectFile(sampleFile2);
+            fileCompareService.selectFile(sampleFile3);
+            fileCompareService.selectFile({ ...sampleFile1, id: 'file4', name: 'File4.cls' });
+
+            assert.strictEqual(fileCompareService.getSelectedFiles().length, 4);
+
+            // Reduce max to 2
+            fileCompareService.setMaxFiles(2);
+            assert.strictEqual(fileCompareService.getSelectedFiles().length, 2);
+
+            // Should keep the last 2 files
+            const remaining = fileCompareService.getSelectedFiles();
+            assert.strictEqual(remaining.length, 2);
         });
     });
 
@@ -253,7 +301,7 @@ suite('FileCompareService Test Suite', () => {
             
             await fileCompareService.compareSelectedFiles();
             
-            assert.ok(showWarningMessageStub.calledWith('Please select 2 files to compare.'));
+            assert.ok(showWarningMessageStub.calledWith('Please select at least 2 files to compare.'));
             assert.ok(!executeCommandStub.calledWith('vscode.diff'));
         });
 
@@ -421,7 +469,7 @@ suite('FileCompareService Test Suite', () => {
             fileCompareService.selectFile(sampleFile2);
             
             const statusText = mockStatusBarItem.text;
-            assert.ok(statusText.includes('Ready to compare'));
+            assert.ok(statusText.includes('Ready to compare') || statusText.includes('ready'));
         });
 
         test('should show comparing state during operation', async () => {

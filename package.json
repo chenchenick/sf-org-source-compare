@@ -55,6 +55,12 @@
         "icon": "$(diff)"
       },
       {
+        "command": "sf-org-source-compare.openMultiWayComparison",
+        "title": "Multi-Way Comparison",
+        "category": "SF Org Compare",
+        "icon": "$(diff-multiple)"
+      },
+      {
         "command": "sf-org-source-compare.selectOrg",
         "title": "Select Organization",
         "category": "SF Org Compare"
@@ -149,6 +155,11 @@
           "group": "navigation"
         },
         {
+          "command": "sf-org-source-compare.openMultiWayComparison",
+          "when": "view == sfOrgCompareView",
+          "group": "navigation"
+        },
+        {
           "command": "sf-org-source-compare.addOrg",
           "when": "view == sfOrgCompareView",
           "group": "navigation"
@@ -222,6 +233,38 @@
         "defaults": {
           "dark": "#cc0033",
           "light": "#cc0033"
+        }
+      },
+      {
+        "id": "sfOrgCompare.selectedFile3",
+        "description": "Background color for third selected file",
+        "defaults": {
+          "dark": "#00cc66",
+          "light": "#00cc66"
+        }
+      },
+      {
+        "id": "sfOrgCompare.selectedFile4",
+        "description": "Background color for fourth selected file",
+        "defaults": {
+          "dark": "#ff9900",
+          "light": "#ff9900"
+        }
+      },
+      {
+        "id": "sfOrgCompare.selectedFile5",
+        "description": "Background color for fifth selected file",
+        "defaults": {
+          "dark": "#9966cc",
+          "light": "#9966cc"
+        }
+      },
+      {
+        "id": "sfOrgCompare.selectedFile6",
+        "description": "Background color for sixth selected file",
+        "defaults": {
+          "dark": "#cccc00",
+          "light": "#cccc00"
         }
       }
     ],
@@ -330,6 +373,35 @@
             "Verbose debugging information",
             "Very detailed trace information"
           ]
+        },
+        "sfOrgSourceCompare.multiWayComparison": {
+          "type": "object",
+          "properties": {
+            "maxFiles": {
+              "type": "number",
+              "default": 4,
+              "minimum": 2,
+              "maximum": 6,
+              "description": "Maximum number of files for multi-way comparison"
+            },
+            "defaultLayout": {
+              "type": "string",
+              "enum": ["horizontal", "vertical", "grid"],
+              "default": "horizontal",
+              "description": "Default layout for multi-way comparison view"
+            },
+            "enableSyncScrolling": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable synchronized scrolling across comparison panes"
+            }
+          },
+          "default": {
+            "maxFiles": 4,
+            "defaultLayout": "horizontal",
+            "enableSyncScrolling": true
+          },
+          "description": "Multi-way comparison settings"
         }
       }
     }

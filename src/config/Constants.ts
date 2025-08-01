@@ -41,6 +41,27 @@ export const SF_CONFIG = {
         PROGRESS_TIMEOUT: 10000
     },
 
+    // Multi-way Comparison Configuration
+    COMPARE: {
+        /** Maximum number of files that can be selected for comparison */
+        MAX_FILES: 6,
+        /** Default maximum files for new users */
+        DEFAULT_MAX_FILES: 4,
+        /** Color scheme for file selection indicators */
+        COLORS: [
+            { primary: 'charts.blue', secondary: 'button.secondaryBackground', icon: 'circle-filled', emoji: '🔵' },
+            { primary: 'charts.red', secondary: 'errorForeground', icon: 'circle-filled', emoji: '🔴' },
+            { primary: 'charts.green', secondary: 'testing.iconPassed', icon: 'circle-filled', emoji: '🟢' },
+            { primary: 'charts.orange', secondary: 'testing.iconQueued', icon: 'circle-filled', emoji: '🟠' },
+            { primary: 'charts.purple', secondary: 'charts.purple', icon: 'circle-filled', emoji: '🟣' },
+            { primary: 'charts.yellow', secondary: 'testing.iconSkipped', icon: 'circle-filled', emoji: '🟡' }
+        ] as const,
+        /** Default comparison layout */
+        DEFAULT_LAYOUT: 'horizontal' as const,
+        /** Supported comparison layouts */
+        LAYOUTS: ['horizontal', 'vertical', 'grid'] as const
+    },
+
     // File System Configuration
     FS: {
         /** Temporary directory prefix */

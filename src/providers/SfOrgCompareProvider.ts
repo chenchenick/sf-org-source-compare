@@ -7,6 +7,7 @@ import { FileCompareService } from '../services/FileCompareService';
 import { UserErrorReporter } from '../errors/UserErrorReporter';
 import { ProgressManager } from '../progress/ProgressManager';
 import { OrgCacheService } from '../services/OrgCacheService';
+import { SF_CONFIG } from '../config';
 
 export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
@@ -337,31 +338,22 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
             if (isSelected) {
                 if (isComparing) {
                     // Show loading state during comparison
+                    const fileNumber = selectionIndex + 1;
                     treeItem.iconPath = new vscode.ThemeIcon('loading~spin');
-                    if (selectionIndex === 0) {
-                        treeItem.label = `[1] ${element.label}`;
-                        treeItem.tooltip = 'Loading file content for comparison...';
-                        treeItem.description = '⏳ Loading...';
-                    } else {
-                        treeItem.label = `[2] ${element.label}`;
-                        treeItem.tooltip = 'Loading file content for comparison...';
-                        treeItem.description = '⏳ Loading...';
-                    }
+                    treeItem.label = `[${fileNumber}] ${element.label}`;
+                    treeItem.tooltip = 'Loading file content for comparison...';
+                    treeItem.description = '⏳ Loading...';
                     // Disable command during comparison
                     treeItem.command = undefined;
                 } else {
-                    // Normal selected state
-                    if (selectionIndex === 0) {
-                        treeItem.iconPath = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.blue'));
-                        treeItem.label = `[1] ${element.label}`;
-                        treeItem.tooltip = 'Selected as first file for comparison - click to open, right-click to unselect';
-                        treeItem.description = '🔵';
-                    } else {
-                        treeItem.iconPath = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.red'));
-                        treeItem.label = `[2] ${element.label}`;
-                        treeItem.tooltip = 'Selected as second file for comparison - click to open, right-click to unselect';
-                        treeItem.description = '🔴';
-                    }
+                    // Normal selected state with multi-file support
+                    const colorConfig = SF_CONFIG.COMPARE.COLORS[selectionIndex] || SF_CONFIG.COMPARE.COLORS[0];
+                    const fileNumber = selectionIndex + 1;
+                    
+                    treeItem.iconPath = new vscode.ThemeIcon(colorConfig.icon, new vscode.ThemeColor(colorConfig.primary));
+                    treeItem.label = `[${fileNumber}] ${element.label}`;
+                    treeItem.tooltip = `Selected as file #${fileNumber} for comparison - click to open, right-click to unselect`;
+                    treeItem.description = colorConfig.emoji;
                     // Enable command when not comparing
                     treeItem.command = {
                         command: 'sf-org-source-compare.openFile',

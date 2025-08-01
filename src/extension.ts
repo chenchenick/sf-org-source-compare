@@ -72,6 +72,39 @@ export async function activate(context: vscode.ExtensionContext) {
 			fileCompareService.compareSelectedFiles();
 		});
 
+		const openMultiWayComparison = vscode.commands.registerCommand('sf-org-source-compare.openMultiWayComparison', async () => {
+			try {
+				if (!fileCompareService.canCompare()) {
+					vscode.window.showWarningMessage('Please select at least 2 files for comparison.');
+					return;
+				}
+
+				const compareType = fileCompareService.getCompareType();
+				if (compareType === 'two-way') {
+					// For two files, use regular comparison
+					await fileCompareService.compareSelectedFiles();
+				} else {
+					// For 3+ files, use multi-way comparison
+					const multiFileCompareWebview = container.resolve(ServiceTokens.MULTI_FILE_COMPARE_WEBVIEW) as any;
+					const multiFileCompareService = container.resolve(ServiceTokens.MULTI_FILE_COMPARE_SERVICE) as any;
+
+					const selection = {
+						files: fileCompareService.getSelectedFiles(),
+						compareType: compareType,
+						layout: multiFileCompareService.getRecommendedLayout(fileCompareService.getSelectedFiles().length),
+						maxFiles: fileCompareService.getMaxFiles()
+					};
+
+					await multiFileCompareWebview.show(selection);
+				}
+			} catch (error) {
+				await userErrorReporter.reportOperationFailure(
+					'Open multi-way comparison',
+					error as Error
+				);
+			}
+		});
+
 		const selectOrg = vscode.commands.registerCommand('sf-org-source-compare.selectOrg', (orgItem) => {
 			if (orgItem.id === 'no-orgs') {
 				enhancedOrgManager.authenticateOrg().then(async () => {
@@ -179,6 +212,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			refreshTreeView,
 			refreshOrg,
 			compareFiles,
+			openMultiWayComparison,
 			selectOrg,
 			selectFile,
 			openFile,
