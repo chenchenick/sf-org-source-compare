@@ -30,6 +30,8 @@ export class ManifestConfigurationWebview {
         if (this.panel) {
             this.panel.reveal();
             if (orgId) {
+                // Send all orgs first, then the specific org data
+                this.sendAllOrgsData();
                 this.sendOrgData(orgId);
             }
             return;
@@ -56,10 +58,46 @@ export class ManifestConfigurationWebview {
 
         // Send initial data
         if (orgId) {
+            // Send all orgs first, then the specific org data
+            this.sendAllOrgsData();
             this.sendOrgData(orgId);
         } else {
-            this.sendAllOrgsData();
+            // Find the last modified org and show it by default
+            const lastModifiedOrgId = this.getLastModifiedOrgId();
+            if (lastModifiedOrgId) {
+                // Send all orgs first, then the specific org data
+                this.sendAllOrgsData();
+                this.sendOrgData(lastModifiedOrgId);
+            } else {
+                this.sendAllOrgsData();
+            }
         }
+    }
+
+    /**
+     * Get the org with the most recent last modified timestamp
+     */
+    private getLastModifiedOrgId(): string | null {
+        const orgs = this.enhancedOrgManager.getOrgs();
+        if (orgs.length === 0) {
+            return null;
+        }
+
+        let lastModifiedOrg: SalesforceOrg | null = null;
+        let lastModifiedTime: Date | null = null;
+
+        for (const org of orgs) {
+            const config = this.manifestManager.getOrgManifestConfig(org.id, org.alias);
+            if (config.lastModified) {
+                const modifiedDate = new Date(config.lastModified);
+                if (!lastModifiedTime || modifiedDate > lastModifiedTime) {
+                    lastModifiedTime = modifiedDate;
+                    lastModifiedOrg = org;
+                }
+            }
+        }
+
+        return lastModifiedOrg ? lastModifiedOrg.id : null;
     }
 
     /**

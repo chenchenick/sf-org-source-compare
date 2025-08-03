@@ -4,6 +4,27 @@ All notable changes to the "sf-org-source-compare" extension will be documented 
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.5] - 2025-08-03
+
+### Added
+- **File Search Feature**: Press `Ctrl+F` to search files across all organizations with instant filtering and multi-select support
+- **Refresh Timestamp Display**: Show exact last refresh time for each org (e.g., "Today, 2:30 PM", "Yesterday, 4:15 PM")
+- **Manifest Configuration Auto-Selection**: Last modified org is automatically selected when opening manifest configuration
+
+### Enhanced
+- **Dropdown Pre-Selection**: Fixed manifest configuration webview to properly pre-select the last modified org in dropdown
+- **Timestamp Formatting**: Added "Today" prefix for current day timestamps to align with other time formats for UI consistency
+- **User Experience**: Removed message bar from search view for cleaner interface
+- **Documentation**: Updated README.md with focused core functions documentation (File Comparison, File Search, Metadata Configuration, Refresh Organizations)
+
+### Fixed
+- Manifest configuration dropdown not showing pre-selected org when auto-selecting last modified org
+- Inconsistent timestamp display formatting between different time periods
+
+### Removed
+- User Preferences option from UI (streamlined interface)
+- Unnecessary message bars in search view interface
+
 ## [0.0.4] - 2025-01-26
 
 ### Added

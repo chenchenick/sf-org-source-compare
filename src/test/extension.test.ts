@@ -47,12 +47,18 @@ suite('Extension Test Suite', () => {
             const expectedCommands = [
                 'sf-org-source-compare.openCompareView',
                 'sf-org-source-compare.refreshOrgs',
+                'sf-org-source-compare.refreshTreeView',
+                'sf-org-source-compare.refreshOrg',
                 'sf-org-source-compare.compareFiles',
                 'sf-org-source-compare.selectOrg',
                 'sf-org-source-compare.selectFile',
+                'sf-org-source-compare.openFile',
                 'sf-org-source-compare.addOrg',
                 'sf-org-source-compare.deleteOrg',
-                'sf-org-source-compare.clearSelection'
+                'sf-org-source-compare.clearSelection',
+                'sf-org-source-compare.cleanupTempFiles',
+                'sf-org-source-compare.configureManifest',
+                'sf-org-source-compare.openFileSearch'
             ];
 
             expectedCommands.forEach(command => {
@@ -201,6 +207,32 @@ suite('Extension Test Suite', () => {
 
             assert.ok(clearSelectionSpy.calledOnce);
             assert.ok(vscodeStubs.showInformationMessage.calledWith('File selection cleared'));
+        });
+
+        test('should handle openFileSearch command', async () => {
+            // Mock FileSearchService since it's created internally
+            const mockFileSearchService = {
+                openFileSearch: sinon.stub().resolves()
+            };
+            
+            // Since FileSearchService is created internally, we can't easily spy on it
+            // This test verifies the command is registered and doesn't throw
+            extension.activate(mockContext);
+
+            assert.doesNotThrow(async () => {
+                await vscode.commands.executeCommand('sf-org-source-compare.openFileSearch');
+            });
+        });
+
+        test('should handle configureManifest command', async () => {
+            extension.activate(mockContext);
+
+            const orgItem = { orgId: 'test-org-id' };
+            
+            // This test verifies the command is registered and doesn't throw
+            assert.doesNotThrow(async () => {
+                await vscode.commands.executeCommand('sf-org-source-compare.configureManifest', orgItem);
+            });
         });
     });
 

@@ -504,6 +504,123 @@ suite('SfOrgCompareProvider Test Suite', () => {
         });
     });
 
+    suite('formatRefreshTime', () => {
+        test('should format today\'s time with "Today" prefix', () => {
+            const today = new Date();
+            today.setHours(14, 30, 0, 0); // 2:30 PM today
+
+            const result = (provider as any).formatRefreshTime(today);
+
+            assert.strictEqual(result, 'Today, 2:30 PM');
+        });
+
+        test('should format yesterday\'s time with "Yesterday" prefix', () => {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            yesterday.setHours(16, 45, 0, 0); // 4:45 PM yesterday
+
+            const result = (provider as any).formatRefreshTime(yesterday);
+
+            assert.strictEqual(result, 'Yesterday, 4:45 PM');
+        });
+
+        test('should format this week\'s time with day abbreviation', () => {
+            const now = new Date();
+            const thisSunday = new Date(now);
+            thisSunday.setDate(now.getDate() - now.getDay()); // Get Sunday of this week
+            thisSunday.setDate(thisSunday.getDate() + 1); // Monday
+            thisSunday.setHours(10, 15, 0, 0); // 10:15 AM Monday
+
+            // Only test if Monday is not today or yesterday
+            const daysDiff = Math.floor((now.getTime() - thisSunday.getTime()) / (1000 * 60 * 60 * 24));
+            if (daysDiff > 1 && daysDiff < 7) {
+                const result = (provider as any).formatRefreshTime(thisSunday);
+                assert.ok(result.includes('Mon, 10:15 AM'));
+            }
+        });
+
+        test('should format older time with month and day', () => {
+            const lastMonth = new Date();
+            lastMonth.setMonth(lastMonth.getMonth() - 1);
+            lastMonth.setDate(15);
+            lastMonth.setHours(9, 30, 0, 0); // 9:30 AM on 15th of last month
+
+            const result = (provider as any).formatRefreshTime(lastMonth);
+
+            const expectedMonth = lastMonth.toLocaleDateString([], { month: 'short' });
+            assert.ok(result.includes(`${expectedMonth} 15, 9:30 AM`));
+        });
+
+        test('should handle edge case times correctly', () => {
+            // Test midnight
+            const midnight = new Date();
+            midnight.setHours(0, 0, 0, 0);
+
+            const result = (provider as any).formatRefreshTime(midnight);
+            assert.ok(result.includes('Today, 12:00 AM'));
+        });
+
+        test('should handle noon correctly', () => {
+            const noon = new Date();
+            noon.setHours(12, 0, 0, 0);
+
+            const result = (provider as any).formatRefreshTime(noon);
+            assert.ok(result.includes('Today, 12:00 PM'));
+        });
+    });
+
+    suite('getTreeItem with timestamps', () => {
+        test('should display refresh timestamp in org description', () => {
+            const refreshTime = new Date();
+            refreshTime.setHours(14, 30, 0, 0); // 2:30 PM today
+
+            // Set refresh timestamp
+            (provider as any).orgRefreshTimestamps.set('org1-id', refreshTime);
+
+            const treeItem = provider.getTreeItem(sampleTreeItem);
+
+            assert.strictEqual(treeItem.description, '(Today, 2:30 PM)');
+            assert.ok(String(treeItem.tooltip).includes('Last refreshed: ' + refreshTime.toLocaleString()));
+        });
+
+        test('should display "never" when no refresh timestamp', () => {
+            const treeItem = provider.getTreeItem(sampleTreeItem);
+
+            assert.strictEqual(treeItem.description, '(never)');
+            assert.ok(String(treeItem.tooltip).includes('Never refreshed'));
+        });
+
+        test('should not affect non-org items with timestamps', () => {
+            const fileTreeItem: TreeItem = {
+                id: 'file1-id',
+                label: 'TestClass.cls',
+                type: ItemType.File,
+                orgId: 'org1-id',
+                file: sampleFile1
+            };
+
+            const treeItem = provider.getTreeItem(fileTreeItem);
+
+            // File items should not have timestamp descriptions
+            assert.notStrictEqual(treeItem.description, '(never)');
+            assert.ok(!String(treeItem.tooltip).includes('refreshed'));
+        });
+
+        test('should handle special "no-orgs" item without timestamp', () => {
+            const noOrgsItem: TreeItem = {
+                id: 'no-orgs',
+                label: 'Add your first Salesforce organization',
+                type: ItemType.Org
+            };
+
+            const treeItem = provider.getTreeItem(noOrgsItem);
+
+            // Special case should not have timestamp
+            assert.ok(!String(treeItem.description).includes('never'));
+            assert.ok(treeItem.command);
+        });
+    });
+
     suite('edge cases and error handling', () => {
         test('should handle provider with no dependencies', () => {
             try {

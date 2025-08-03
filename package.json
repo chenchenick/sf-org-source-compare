@@ -2,7 +2,7 @@
   "name": "sf-org-source-compare",
   "displayName": "Salesforce Org Source Compare",
   "description": "Compare source code between different Salesforce organizations with dual-editor interface",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "icon": "icon.png",
   "publisher": "chenology",
   "repository": {
@@ -106,12 +106,6 @@
         "icon": "$(settings-gear)"
       },
       {
-        "command": "sf-org-source-compare.openUserPreferences",
-        "title": "User Preferences",
-        "category": "SF Org Compare",
-        "icon": "$(preferences-open)"
-      },
-      {
         "command": "sf-org-source-compare.openFileSearch",
         "title": "Search Files Across Orgs",
         "category": "SF Org Compare",
@@ -165,11 +159,6 @@
         },
         {
           "command": "sf-org-source-compare.configureManifest",
-          "when": "view == sfOrgCompareView",
-          "group": "configuration"
-        },
-        {
-          "command": "sf-org-source-compare.openUserPreferences",
           "when": "view == sfOrgCompareView",
           "group": "configuration"
         },

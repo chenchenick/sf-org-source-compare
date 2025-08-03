@@ -150,16 +150,17 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 		});
 
-		const openUserPreferences = vscode.commands.registerCommand('sf-org-source-compare.openUserPreferences', async (categoryId?: string) => {
-			try {
-				await userPreferencesWebview.show(categoryId);
-			} catch (error) {
-				await userErrorReporter.reportOperationFailure(
-					'Open user preferences',
-					error as Error
-				);
-			}
-		});
+		// User preferences temporarily disabled
+		// const openUserPreferences = vscode.commands.registerCommand('sf-org-source-compare.openUserPreferences', async (categoryId?: string) => {
+		// 	try {
+		// 		await userPreferencesWebview.show(categoryId);
+		// 	} catch (error) {
+		// 		await userErrorReporter.reportOperationFailure(
+		// 			'Open user preferences',
+		// 			error as Error
+		// 		);
+		// 	}
+		// });
 
 		const openFileSearch = vscode.commands.registerCommand('sf-org-source-compare.openFileSearch', async () => {
 			try {
@@ -187,7 +188,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			clearSelection,
 			cleanupTempFiles,
 			configureManifest,
-			openUserPreferences,
+			// openUserPreferences, // Temporarily disabled
 			openFileSearch
 		);
 

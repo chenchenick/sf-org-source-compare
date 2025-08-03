@@ -1,7 +1,7 @@
 # Salesforce Org Source Compare
 
 ![VSCode Extension](https://img.shields.io/badge/VSCode-Extension-blue.svg)
-![Version](https://img.shields.io/badge/version-0.0.4-green.svg)
+![Version](https://img.shields.io/badge/version-0.0.5-green.svg)
 
 **Effortlessly compare source code and metadata between multiple Salesforce organizations directly in VS Code.**
 
@@ -49,39 +49,46 @@ Search for "Salesforce Org Source Compare" in the Extensions view or [install di
 - **Click to Edit**: Open any file directly in VS Code with full syntax highlighting
 - **State Preservation**: Folder expansion remembered across sessions
 
-## 🎮 How to Use
+## 🎮 Core Functions
 
-### Adding Organizations
-1. Click the **+** icon in the extension panel
-2. Select from your authenticated orgs (use `sf org list` to see available orgs)
-3. Configure metadata types with the gear button ⚙️
+### File Comparison
+Compare files between different Salesforce orgs:
+1. **Select Files**: Right-click any file and choose "Select File" - first file gets blue [1] badge, second gets red [2] badge
+2. **Start Comparison**: Click the **diff icon** (⚡) in the toolbar or use the "Compare Selected Files" command
+3. **View Results**: Files open side-by-side in VS Code's built-in diff editor with syntax highlighting
+4. **Clear Selection**: Click the clear icon (🗑️) to reset file selection
 
-### Browsing Source Code
-1. Click an org name to expand and load source files
-2. Navigate through the native SFDX folder structure
-3. Click any file to open it in the VS Code editor
+### File Search (Ctrl+F)
+Search and compare files across all organizations:
+1. **Open Search**: Press `Ctrl+F` when focused on the extension panel or click the search icon (🔍)
+2. **Search Files**: Type to filter files across all your connected orgs
+3. **Select Multiple**: Choose 1 or 2 files from the search results
+4. **Auto-Compare**: Selecting 2 files automatically starts the comparison
 
-### Comparing Files
-1. **Right-click** first file → "Select File" (shows blue [1] badge)
-2. **Right-click** second file → "Select File" (shows red [2] badge)
-3. Click the **diff icon** in the toolbar
-4. View side-by-side comparison in VS Code's diff editor
+### Metadata Configuration
+Configure which metadata types to retrieve for each org:
+1. **Open Config**: Click the gear icon (⚙️) next to any org name
+2. **Select Types**: Choose from 25+ metadata types organized by categories (Apex, Components, Security, etc.)
+3. **Quick Presets**: Use "Enable All Types", "Core Types Only", or "Reset to Default" buttons
+4. **Preview**: Click "Preview Manifest" to see the generated package.xml
+5. **Save**: Changes are automatically saved when you make selections
 
-### Customizing Metadata Types
-1. Click the **gear icon** ⚙️ next to any org name
-2. Choose from 25+ metadata types organized by category
-3. Use presets: "Enable All Types", "Core Types Only", or "Reset to Default"
-4. Preview generated manifest before saving
+### Refresh Organizations
+Keep your org data up-to-date:
+1. **Refresh All**: Click the main refresh button (🔄) to update all expanded orgs from Salesforce
+2. **Refresh Single Org**: Right-click an org and select "Refresh Organization" or click the refresh icon next to the org name
+3. **Smart Caching**: Files load instantly from cache between refreshes - refresh only when you need the latest changes
+4. **Timestamp Display**: See exactly when each org was last refreshed (e.g., "Today, 2:30 PM", "Yesterday, 4:15 PM")
 
-## 🛠️ Settings & Preferences
+## 🛠️ Settings & Configuration
 
-Access **User Preferences** from the extension toolbar to customize:
+Configure the extension through VS Code settings or the manifest configuration interface:
 
-- **General**: Auto-refresh behavior, progress indicators
-- **Source Retrieval**: API version, timeout settings, metadata types
-- **File Comparison**: Diff settings, selection behavior
-- **Error Handling**: Error display preferences, retry behavior
-- **Advanced**: Logging levels, cache settings, concurrent requests
+- **API Version**: Choose Salesforce API version (58.0-61.0) in VS Code settings
+- **Timeouts**: Adjust operation timeouts for large orgs
+- **Cache Settings**: Control cache duration and cleanup behavior
+- **Metadata Types**: Default metadata types for new orgs
+- **Logging**: Set log level for troubleshooting (error, warn, info, debug, trace)
 
 ## 🆘 Common Issues
 

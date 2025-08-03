@@ -323,6 +323,19 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
                 // Regular orgs should not have commands - let expansion handle naturally
                 treeItem.contextValue = 'availableOrg';
                 treeItem.tooltip = `${element.label} - Right-click for options`;
+                
+                // Add refresh timestamp to description
+                if (element.orgId) {
+                    const lastRefresh = this.orgRefreshTimestamps.get(element.orgId);
+                    if (lastRefresh) {
+                        const timeString = this.formatRefreshTime(lastRefresh);
+                        treeItem.description = `(${timeString})`;
+                        treeItem.tooltip = `${element.label} - Last refreshed: ${lastRefresh.toLocaleString()} - Right-click for options`;
+                    } else {
+                        treeItem.description = '(never)';
+                        treeItem.tooltip = `${element.label} - Never refreshed - Right-click for options`;
+                    }
+                }
             }
         } else if (element.type === ItemType.File) {
             // Check if this file is selected for comparison
@@ -656,26 +669,37 @@ export class SfOrgCompareProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     /**
-     * Format refresh time as a relative time string
+     * Format refresh time as an exact timestamp string
      */
     private formatRefreshTime(date: Date): string {
         const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMinutes = Math.floor(diffMs / (1000 * 60));
-        const diffHours = Math.floor(diffMinutes / 60);
-        const diffDays = Math.floor(diffHours / 24);
+        const isToday = date.toDateString() === now.toDateString();
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const isYesterday = date.toDateString() === yesterday.toDateString();
+        
+        // Get day of week for this week
+        const daysDiff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+        const isThisWeek = daysDiff < 7 && daysDiff > 1;
 
-        if (diffMinutes < 1) {
-            return 'just now';
-        } else if (diffMinutes < 60) {
-            return `${diffMinutes}m ago`;
-        } else if (diffHours < 24) {
-            return `${diffHours}h ago`;
-        } else if (diffDays < 7) {
-            return `${diffDays}d ago`;
+        if (isToday) {
+            // Today: "Today, 2:30 PM"
+            const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            return `Today, ${timeStr}`;
+        } else if (isYesterday) {
+            // Yesterday: "Yesterday, 2:30 PM"
+            const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            return `Yesterday, ${timeStr}`;
+        } else if (isThisWeek) {
+            // This week: "Mon, 2:30 PM"
+            const dayStr = date.toLocaleDateString([], { weekday: 'short' });
+            const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            return `${dayStr}, ${timeStr}`;
         } else {
-            // For older than a week, show the actual date
-            return date.toLocaleDateString();
+            // Older: "Jan 15, 2:30 PM"
+            const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            return `${dateStr}, ${timeStr}`;
         }
     }
 }
