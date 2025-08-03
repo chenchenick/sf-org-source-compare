@@ -25,10 +25,7 @@ export class FileSearchService {
 
         // Handle selection changes
         quickPick.onDidChangeSelection(items => {
-            if (items.length > 0) {
-                // Update selection status in the description
-                this.updateSelectionStatus(quickPick, items);
-            }
+            // Remove the message bar updates - no longer needed
         });
 
         // Handle when user accepts selection
@@ -186,16 +183,5 @@ export class FileSearchService {
         return items;
     }
 
-    private updateSelectionStatus(quickPick: vscode.QuickPick<vscode.QuickPickItem>, selectedItems: readonly vscode.QuickPickItem[]): void {
-        if (selectedItems.length === 1) {
-            quickPick.title = `1 file selected - Select another file to compare, or press Enter to select only this file`;
-        } else if (selectedItems.length === 2) {
-            quickPick.title = `2 files selected - Press Enter to compare these files`;
-        } else if (selectedItems.length > 2) {
-            quickPick.title = `${selectedItems.length} files selected - Please select only 1 or 2 files`;
-        } else {
-            quickPick.title = undefined;
-        }
-    }
 
 }

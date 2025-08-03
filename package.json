@@ -207,6 +207,13 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "sf-org-source-compare.openFileSearch",
+        "key": "ctrl+f",
+        "when": "focusedView == sfOrgCompareView"
+      }
+    ],
     "colors": [
       {
         "id": "sfOrgCompare.selectedFile1",
