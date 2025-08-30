@@ -97,10 +97,19 @@ export class SecureCommandExecutor {
             let stderr = '';
             let processCompleted = false;
 
-            const childProcess = spawn(command, sanitizedArgs, {
+            // On Windows, we need to use shell mode for .cmd files or find the .exe
+            let finalCommand = command;
+            let useShell = false;
+            
+            if (process.platform === 'win32' && (command === 'sf' || command === 'sfdx')) {
+                // For Windows, we need shell mode to execute .cmd files properly
+                useShell = true;
+            }
+
+            const childProcess = spawn(finalCommand, sanitizedArgs, {
                 cwd: options.cwd,
                 stdio: ['ignore', 'pipe', 'pipe'],
-                shell: false // Never use shell to prevent command injection
+                shell: useShell // Use shell only when necessary for Windows .cmd files
             });
 
             // Set timeout
